@@ -1,16 +1,31 @@
 /**
  * Unit tests for memory tool registration and execute function.
- *
- * Mocks ExtensionAPI to verify registerTool is called with correct parameters
- * and execute returns the expected JSON format.
  */
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { registerMemoryTool } from "../../src/tools/memory-tool.js";
 import { MemoryStore } from "../../src/store/memory-store.js";
+import { DatabaseManager } from "../../src/store/db.js";
+import { getMemories } from "../../src/store/sqlite-memory-store.js";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 describe("registerMemoryTool", () => {
+  let tmpDir: string;
+  let dbManager: DatabaseManager;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-tool-test-"));
+    dbManager = new DatabaseManager(tmpDir);
+  });
+
+  afterEach(() => {
+    dbManager.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("registers tool with name 'memory' and correct parameters", () => {
     const registeredTools: any[] = [];
 
@@ -58,7 +73,7 @@ describe("registerMemoryTool", () => {
       }),
     } as unknown as MemoryStore;
 
-    registerMemoryTool(mockPi, mockStore, null);
+    registerMemoryTool(mockPi, mockStore, null, dbManager);
     const result = await capturedResult.execute("tc-1", { action: "add", target: "memory", content: "Entry one" }, undefined as any, undefined as any, undefined as any);
 
     assert.strictEqual(result.content[0].type, "text", "content should be text type");
@@ -68,6 +83,128 @@ describe("registerMemoryTool", () => {
     assert.ok(parsed.usage.includes("5000"), "usage should show total limit");
     assert.strictEqual(parsed.entry_count, 1, "entry_count should be 1");
     assert.strictEqual(result.details.success, true, "details should mirror result");
+  });
+
+  it("syncs successful adds into SQLite", async () => {
+    let capturedResult: any;
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockStore = {
+      add: () => ({
+        success: true,
+        target: "memory",
+        entries: ["Entry one"],
+        usage: "5% — 110/5000 chars",
+        entry_count: 1,
+        message: "Entry added.",
+      }),
+    } as unknown as MemoryStore;
+
+    registerMemoryTool(mockPi, mockStore, null, dbManager);
+    await capturedResult.execute("tc-1", { action: "add", target: "memory", content: "Entry one" }, undefined as any, undefined as any, undefined as any);
+
+    const results = getMemories(dbManager, { target: 'memory', project: null });
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].content, 'Entry one');
+  });
+
+  it("maps project target to SQLite project scope", async () => {
+    let capturedResult: any;
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockProjectStore = {
+      add: () => ({
+        success: true,
+        target: "memory",
+        entries: ["Project entry"],
+        usage: "2% — 20/5000 chars",
+        entry_count: 1,
+        message: "Entry added.",
+      }),
+    } as unknown as MemoryStore;
+
+    registerMemoryTool(mockPi, {} as MemoryStore, mockProjectStore, dbManager, 'project-a');
+    const result = await capturedResult.execute("tc-1", { action: "add", target: "project", content: "Project entry" }, undefined as any, undefined as any, undefined as any);
+
+    const parsed = JSON.parse(result.content[0].text);
+    assert.strictEqual(parsed.target, 'project');
+
+    const results = getMemories(dbManager, { project: 'project-a', target: 'memory' });
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].content, 'Project entry');
+  });
+
+  it("returns a warning instead of failing when SQLite sync errors", async () => {
+    let capturedResult: any;
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockStore = {
+      add: () => ({
+        success: true,
+        target: "memory",
+        entries: ["Entry one"],
+        usage: "5% — 110/5000 chars",
+        entry_count: 1,
+        message: "Entry added.",
+      }),
+    } as unknown as MemoryStore;
+
+    const failingDbManager = {
+      getDb: () => {
+        throw new Error('sqlite unavailable');
+      },
+    } as unknown as DatabaseManager;
+
+    registerMemoryTool(mockPi, mockStore, null, failingDbManager);
+    const result = await capturedResult.execute("tc-1", { action: "add", target: "memory", content: "Entry one" }, undefined as any, undefined as any, undefined as any);
+
+    const parsed = JSON.parse(result.content[0].text);
+    assert.strictEqual(parsed.success, true);
+    assert.match(parsed.message, /SQLite search sync failed/);
+    assert.match(parsed.warning, /sqlite unavailable/);
+  });
+
+  it("does not sync to SQLite when core Markdown add fails", async () => {
+    let capturedResult: any;
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockStore = {
+      add: () => ({
+        success: false,
+        error: "Memory at 5000/5000 chars. Adding this entry would exceed the limit.",
+      }),
+    } as unknown as MemoryStore;
+
+    registerMemoryTool(mockPi, mockStore, null, dbManager);
+    const result = await capturedResult.execute(
+      "tc-1",
+      { action: "add", target: "memory", content: "overflow entry" },
+      undefined as any,
+      undefined as any,
+      undefined as any,
+    );
+
+    const parsed = JSON.parse(result.content[0].text);
+    assert.strictEqual(parsed.success, false);
+
+    const rows = getMemories(dbManager, { target: "memory", project: null });
+    assert.strictEqual(rows.length, 0, "SQLite should stay unchanged when core add fails");
   });
 
   it("execute add without content returns error", async () => {

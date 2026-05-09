@@ -3,8 +3,13 @@
  * and handler behavior (rate limiting, pi.exec trigger).
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DatabaseManager } from "../../src/store/db.js";
+import { getMemories } from "../../src/store/sqlite-memory-store.js";
 import { isCorrection, setupCorrectionDetector } from "../../src/handlers/correction-detector.js";
 
 // ─── Pattern matching tests ───
@@ -169,6 +174,8 @@ describe("setupCorrectionDetector handler", () => {
   let handlers: Record<string, Function[]>;
   let execCalls: any[];
   let notifyCalls: any[];
+  let tmpDir: string;
+  let dbManager: DatabaseManager;
 
   function createMockPi(execReturn?: { code: number; stdout: string; stderr: string }) {
     const ret = execReturn ?? { code: 0, stdout: "Saved correction", stderr: "" };
@@ -243,6 +250,13 @@ describe("setupCorrectionDetector handler", () => {
     handlers = {};
     execCalls = [];
     notifyCalls = [];
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "correction-detector-test-"));
+    dbManager = new DatabaseManager(tmpDir);
+  });
+
+  afterEach(() => {
+    dbManager.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("triggers pi.exec when correction detected", async () => {
@@ -290,6 +304,62 @@ describe("setupCorrectionDetector handler", () => {
     await settle();
 
     assert.strictEqual(execCalls.length, firstCallCount, "second correction should be rate-limited");
+  });
+
+  it("syncs direct correction saves into SQLite", async () => {
+    const pi = createMockPi();
+    const correctionStore = {
+      ...mockStore,
+      addFailure: async () => ({ success: true, target: 'failure', entry_count: 1, message: 'Failure memory saved: correction' }),
+    } as any;
+
+    setupCorrectionDetector(pi, correctionStore, null, config, dbManager);
+
+    const branch = [
+      { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use pnpm instead" }] } },
+      { type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+    ];
+
+    fireMessageEnd("user", "no, use pnpm instead");
+    fireTurnEnd(branch);
+    await settle();
+
+    const failures = getMemories(dbManager, { target: 'failure' });
+    assert.strictEqual(failures.length, 1);
+    assert.match(failures[0].content, /use pnpm instead/);
+    assert.strictEqual(failures[0].category, 'correction');
+  });
+
+  it("does not break correction handling when SQLite sync fails", async () => {
+    const pi = createMockPi();
+    let addFailureCalls = 0;
+    const correctionStore = {
+      ...mockStore,
+      addFailure: async () => {
+        addFailureCalls++;
+        return { success: true, target: 'failure', entry_count: 1, message: 'Failure memory saved: correction' };
+      },
+    } as any;
+
+    const failingDbManager = {
+      getDb: () => {
+        throw new Error('sqlite unavailable');
+      },
+    } as unknown as DatabaseManager;
+
+    setupCorrectionDetector(pi, correctionStore, null, config, failingDbManager);
+
+    const branch = [
+      { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use yarn instead" }] } },
+      { type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+    ];
+
+    fireMessageEnd("user", "no, use yarn instead");
+    fireTurnEnd(branch);
+    await settle();
+
+    assert.ok(execCalls.length >= 1, 'correction review should still run');
+    assert.strictEqual(addFailureCalls, 1, 'Markdown correction save should still happen');
   });
 
   it("does not register handlers when correctionDetection is false", () => {

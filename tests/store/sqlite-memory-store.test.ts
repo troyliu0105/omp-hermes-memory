@@ -11,6 +11,11 @@ import {
   removeMemory,
   touchMemory,
   getMemoryStats,
+  syncMemoryEntry,
+  replaceSyncedMemories,
+  removeSyncedMemories,
+  parseMarkdownMemoryEntry,
+  formatFailureMemoryContent,
 } from '../../src/store/sqlite-memory-store.js';
 
 describe('sqlite-memory-store', () => {
@@ -50,6 +55,98 @@ describe('sqlite-memory-store', () => {
     it('should add a global entry (null project)', () => {
       const entry = addMemory(dbManager, 'timezone: AEST');
       assert.strictEqual(entry.project, null);
+    });
+  });
+
+  describe('syncMemoryEntry', () => {
+    it('deduplicates exact logical entries', () => {
+      const first = syncMemoryEntry(dbManager, {
+        content: 'prefers pnpm over npm',
+        target: 'memory',
+      });
+      const second = syncMemoryEntry(dbManager, {
+        content: 'prefers pnpm over npm',
+        target: 'memory',
+      });
+
+      assert.strictEqual(first.action, 'inserted');
+      assert.strictEqual(second.action, 'existing');
+      assert.strictEqual(getMemories(dbManager).length, 1);
+    });
+
+    it('stores project-scoped memory with project name', () => {
+      syncMemoryEntry(dbManager, {
+        content: 'uses Prisma',
+        target: 'memory',
+        project: 'project-a',
+      });
+
+      const results = getMemories(dbManager, { project: 'project-a' });
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].project, 'project-a');
+      assert.strictEqual(results[0].target, 'memory');
+    });
+
+    it('preserves failure category metadata', () => {
+      syncMemoryEntry(dbManager, {
+        content: formatFailureMemoryContent('pnpm lockfile mismatch', {
+          category: 'tool-quirk',
+          failureReason: 'npm install rewrote lockfile',
+        }),
+        target: 'failure',
+        category: 'tool-quirk',
+        failureReason: 'npm install rewrote lockfile',
+      });
+
+      const results = getMemories(dbManager, { target: 'failure', category: 'tool-quirk' });
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].category, 'tool-quirk');
+      assert.strictEqual(results[0].failureReason, 'npm install rewrote lockfile');
+    });
+
+    it('parses Markdown failure entries for backfill', () => {
+      const parsed = parseMarkdownMemoryEntry(
+        '[correction] use pnpm — Failed: npm install rewrote lockfile <!-- created=2026-05-08, last=2026-05-09 -->',
+        'failure',
+      );
+
+      assert.strictEqual(parsed.category, 'correction');
+      assert.strictEqual(parsed.failureReason, 'npm install rewrote lockfile');
+      assert.strictEqual(parsed.created, '2026-05-08');
+      assert.strictEqual(parsed.lastReferenced, '2026-05-09');
+    });
+  });
+
+  describe('replace/remove synced memories', () => {
+    it('escapes % and _ during replace matching', () => {
+      addMemory(dbManager, 'token 100%_safe value');
+      addMemory(dbManager, 'token 100XXsafe value');
+
+      const result = replaceSyncedMemories(dbManager, '100%_safe', {
+        content: 'token updated literal value',
+        target: 'memory',
+        project: null,
+      });
+
+      assert.strictEqual(result.matched, 1);
+      const all = getMemories(dbManager);
+      assert.ok(all.some((entry) => entry.content === 'token updated literal value'));
+      assert.ok(all.some((entry) => entry.content === 'token 100XXsafe value'));
+    });
+
+    it('escapes % and _ during remove matching', () => {
+      addMemory(dbManager, 'remove 50%_match literal');
+      addMemory(dbManager, 'remove 50AAmatch literal');
+
+      const result = removeSyncedMemories(dbManager, '50%_match', {
+        target: 'memory',
+        project: null,
+      });
+
+      assert.strictEqual(result.matched, 1);
+      const all = getMemories(dbManager);
+      assert.strictEqual(all.length, 1);
+      assert.strictEqual(all[0].content, 'remove 50AAmatch literal');
     });
   });
 
