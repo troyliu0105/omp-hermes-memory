@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { DatabaseManager } from '../../src/store/db.js';
-import { indexSession, indexAllSessions, getSessionStats } from '../../src/store/session-indexer.js';
+import { indexSession, indexAllSessions, indexLatestSessionForCwd, getSessionStats } from '../../src/store/session-indexer.js';
 import type { ParsedSession } from '../../src/store/session-parser.js';
 
 describe('session-indexer', () => {
@@ -167,6 +167,46 @@ describe('session-indexer', () => {
     it('should handle non-existent sessions directory', () => {
       const result = indexAllSessions(dbManager, '/nonexistent/path');
       assert.strictEqual(result.sessionsProcessed, 0);
+    });
+  });
+
+  describe('indexLatestSessionForCwd', () => {
+    it('should index the latest JSONL session for the current cwd', () => {
+      const sessionsDir = path.join(tmpDir, 'sessions');
+      const encodedCwd = '/test/project'.replace(/\//g, '-');
+      const projectDir = path.join(sessionsDir, encodedCwd);
+      fs.mkdirSync(projectDir, { recursive: true });
+
+      const olderLines = [
+        JSON.stringify({ type: 'session', id: 'older', timestamp: '2026-05-03T00:00:00Z', cwd: '/test/project' }),
+        JSON.stringify({
+          type: 'message',
+          id: 'older-m1',
+          parentId: null,
+          timestamp: '2026-05-03T00:01:00Z',
+          message: { role: 'user', content: [{ type: 'text', text: 'older' }], timestamp: Date.now() },
+        }),
+      ];
+      fs.writeFileSync(path.join(projectDir, '001.jsonl'), olderLines.join('\n'));
+
+      const newerLines = [
+        JSON.stringify({ type: 'session', id: 'newer', timestamp: '2026-05-04T00:00:00Z', cwd: '/test/project' }),
+        JSON.stringify({
+          type: 'message',
+          id: 'newer-m1',
+          parentId: null,
+          timestamp: '2026-05-04T00:01:00Z',
+          message: { role: 'user', content: [{ type: 'text', text: 'newer' }], timestamp: Date.now() },
+        }),
+      ];
+      fs.writeFileSync(path.join(projectDir, '999.jsonl'), newerLines.join('\n'));
+
+      const result = indexLatestSessionForCwd(dbManager, '/test/project', sessionsDir);
+      assert.ok(result);
+      assert.strictEqual(result?.sessionId, 'newer');
+
+      const stats = getSessionStats(dbManager);
+      assert.strictEqual(stats.totalSessions, 1);
     });
   });
 

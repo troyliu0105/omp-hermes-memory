@@ -209,6 +209,28 @@ describe("setupSkillAutoTrigger", () => {
     assert.strictEqual(execCalls.length, firstCallCount, "should only trigger once per session");
   });
 
+  it("does not pass turn-scoped ctx.signal to the subprocess", async () => {
+    const pi = createMockPi();
+    setupSkillAutoTrigger(pi, mockStore, mockSkillStore, config);
+
+    const branch = makeBranchWithToolCalls(9, ["read", "bash", "edit"]);
+    const h = handlers["turn_end"];
+    const ctx = {
+      sessionManager: { getBranch: () => branch },
+      signal: { aborted: false },
+      ui: { notify: () => {} },
+    } as any;
+
+    for (const fn of h) {
+      fn({ message: branch[1].message }, ctx);
+    }
+    await settle();
+
+    assert.ok(execCalls.length >= 1);
+    const options = execCalls[0][2];
+    assert.equal(options.signal, undefined);
+  });
+
   it("handles branch access failure gracefully", async () => {
     const pi = createMockPi();
     setupSkillAutoTrigger(pi, mockStore, mockSkillStore, config);

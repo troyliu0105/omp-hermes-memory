@@ -24,7 +24,9 @@ export function registerCandidateShadowRunCommand(
       const sessionsDir = options.sessionsDir ?? path.join(os.homedir(), ".pi", "agent", "sessions");
       ctx.ui.notify("🔎 Running shadow candidate extraction (read-only)...", "info");
 
-      const report = buildCandidateShadowReport(sessionsDir);
+      const report = buildCandidateShadowReport(sessionsDir, {
+        confidenceThreshold: config.candidateConfidenceThreshold,
+      });
       const duplicatePct = (report.duplicateRate * 100).toFixed(1);
       const lowConfPct = (report.lowConfidenceRate * 100).toFixed(1);
 

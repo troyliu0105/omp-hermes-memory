@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { DatabaseManager } from './db.js';
 import { parseSessionFile, getSessionFiles, type ParsedSession } from './session-parser.js';
 
@@ -122,6 +124,28 @@ export function indexAllSessions(
 /**
  * Get statistics about indexed sessions.
  */
+export function indexLatestSessionForCwd(
+  dbManager: DatabaseManager,
+  cwd: string,
+  sessionsDir: string,
+): IndexResult | null {
+  const encodedCwd = cwd.replace(/\//g, '-');
+  const sessionDir = path.join(sessionsDir, encodedCwd);
+  if (!fs.existsSync(sessionDir)) return null;
+
+  const files = fs.readdirSync(sessionDir)
+    .filter((file) => file.endsWith('.jsonl'))
+    .sort()
+    .reverse();
+
+  if (files.length === 0) return null;
+
+  const sessionData = parseSessionFile(path.join(sessionDir, files[0]));
+  if (!sessionData) return null;
+
+  return indexSession(dbManager, sessionData);
+}
+
 export function getSessionStats(dbManager: DatabaseManager): {
   totalSessions: number;
   totalMessages: number;

@@ -9,9 +9,17 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { DatabaseManager } from '../store/db.js';
 import { indexAllSessions, getSessionStats } from '../store/session-indexer.js';
 
-const SESSIONS_DIR = path.join(os.homedir(), '.pi', 'agent', 'sessions');
+interface IndexSessionsCommandOptions {
+  sessionsDir?: string;
+}
 
-export function registerIndexSessionsCommand(pi: ExtensionAPI): void {
+const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.pi', 'agent', 'sessions');
+
+export function registerIndexSessionsCommand(
+  pi: ExtensionAPI,
+  dbManager: DatabaseManager,
+  options: IndexSessionsCommandOptions = {},
+): void {
   pi.registerCommand("memory-index-sessions", {
     description: "Import past Pi sessions into the search database",
     handler: async (_args, ctx: ExtensionCommandContext) => {
@@ -22,11 +30,13 @@ export function registerIndexSessionsCommand(pi: ExtensionAPI): void {
         // Count sessions first for progress display
         let totalFiles = 0;
         let projectDirs: string[] = [];
-        if (fs.existsSync(SESSIONS_DIR)) {
-          projectDirs = fs.readdirSync(SESSIONS_DIR)
-            .filter(d => fs.statSync(path.join(SESSIONS_DIR, d)).isDirectory());
+        const sessionsDir = options.sessionsDir ?? DEFAULT_SESSIONS_DIR;
+
+        if (fs.existsSync(sessionsDir)) {
+          projectDirs = fs.readdirSync(sessionsDir)
+            .filter(d => fs.statSync(path.join(sessionsDir, d)).isDirectory());
           for (const dir of projectDirs) {
-            const files = fs.readdirSync(path.join(SESSIONS_DIR, dir))
+            const files = fs.readdirSync(path.join(sessionsDir, dir))
               .filter(f => f.endsWith('.jsonl'));
             totalFiles += files.length;
           }
@@ -34,12 +44,8 @@ export function registerIndexSessionsCommand(pi: ExtensionAPI): void {
 
         ctx.ui.notify(`📁 Found ${totalFiles} session files across ${projectDirs.length} projects\n⏳ Indexing...`, 'info');
 
-        const memoryDir = path.join(os.homedir(), '.pi', 'agent', 'memory');
-        const dbManager = new DatabaseManager(memoryDir);
-
-        try {
-          const result = indexAllSessions(dbManager, SESSIONS_DIR);
-          const stats = getSessionStats(dbManager);
+        const result = indexAllSessions(dbManager, sessionsDir);
+        const stats = getSessionStats(dbManager);
 
           let output = `\n✅ Session indexing complete!\n\n`;
           output += `📊 Results:\n`;
@@ -73,10 +79,7 @@ export function registerIndexSessionsCommand(pi: ExtensionAPI): void {
 
           output += `\n💡 Use the session_search tool to search across indexed sessions.`;
 
-          ctx.ui.notify(output, 'info');
-        } finally {
-          dbManager.close();
-        }
+        ctx.ui.notify(output, 'info');
       } catch (err) {
         ctx.ui.notify(`❌ Session indexing failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
       }

@@ -90,17 +90,19 @@ export function setupSkillAutoTrigger(
         "If nothing reusable happened, say 'Nothing to extract.' and stop.",
       ].join("\n");
 
-      const result = await pi.exec("pi", ["-p", "--no-session", prompt], {
-        signal: ctx.signal,
+      void pi.exec("pi", ["-p", "--no-session", prompt], {
+        signal: undefined,
         timeout: 60000,
-      });
-
-      if (result.code === 0 && result.stdout) {
-        const output = result.stdout.trim();
-        if (output && !output.toLowerCase().includes("nothing to extract")) {
-          ctx.ui.notify("🧠 Complex task detected — skill extracted", "info");
+      }).then((result) => {
+        if (result.code === 0 && result.stdout) {
+          const output = result.stdout.trim();
+          if (output && !output.toLowerCase().includes("nothing to extract")) {
+            ctx.ui.notify("🧠 Complex task detected — skill extracted", "info");
+          }
         }
-      }
+      }).catch(() => {
+        // Best-effort — don't block
+      });
     } catch {
       // Best-effort — don't block
     }

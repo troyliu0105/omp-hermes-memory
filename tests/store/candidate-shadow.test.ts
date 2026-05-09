@@ -4,6 +4,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { buildCandidateShadowReport, extractShadowCandidatesFromSession } from "../../src/store/candidate-shadow.js";
+import { DatabaseManager } from '../../src/store/db.js';
+import { indexSession } from '../../src/store/session-indexer.js';
+import { extractCandidatesFromIndexedMessages } from '../../src/store/candidate-extractor.js';
+import { listCandidates } from '../../src/store/candidate-store.js';
 import type { ParsedSession } from "../../src/store/session-parser.js";
 
 function writeSessionFile(dir: string, fileName: string, lines: unknown[]): string {
@@ -91,6 +95,39 @@ describe("candidate-shadow", () => {
 
     assert.equal(corrections.length, 1);
     assert.equal(failureFix.length, 1);
+  });
+
+  it('matches rebuild extraction behavior for normalized repeated corrections', () => {
+    const session: ParsedSession = {
+      id: 's-parity',
+      project: 'demo',
+      cwd: '/tmp/demo',
+      startedAt: '2026-05-06T00:00:00.000Z',
+      endedAt: null,
+      messages: [
+        { id: 'u1', role: 'user', content: 'No, use yarn instead.', timestamp: '2026-05-06T00:00:01.000Z' },
+        { id: 'u2', role: 'user', content: 'no use yarn instead', timestamp: '2026-05-06T00:00:02.000Z' },
+      ],
+    };
+
+    const shadow = extractShadowCandidatesFromSession(session)
+      .map((candidate) => `${candidate.extractorRule}:${candidate.snippet}`)
+      .sort();
+
+    const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'candidate-shadow-parity-'));
+    const dbManager = new DatabaseManager(dbDir);
+    try {
+      indexSession(dbManager, session);
+      extractCandidatesFromIndexedMessages(dbManager, { minConfidence: 0 });
+      const rebuilt = listCandidates(dbManager)
+        .map((candidate) => `${candidate.extractorRule}:${candidate.snippet}`)
+        .sort();
+
+      assert.deepEqual(rebuilt, shadow);
+    } finally {
+      dbManager.close();
+      fs.rmSync(dbDir, { recursive: true, force: true });
+    }
   });
 
   it("buildCandidateShadowReport scans files, dedupes candidates, and returns top rules", () => {

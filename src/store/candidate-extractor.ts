@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { DatabaseManager } from "./db.js";
 import { addCandidate, type CandidateSourceType } from "./candidate-store.js";
-import type { MemoryConfig } from "../types.js";
 
-interface MessageRow {
+interface DbMessageRow {
   id: string | null;
   session_id: string;
   role: "user" | "assistant" | "system";
@@ -13,7 +12,17 @@ interface MessageRow {
   project: string;
 }
 
-interface CandidateDraft {
+export interface CandidateMessageRow {
+  id: string | null;
+  session_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string;
+  tool_calls: string[];
+  project: string;
+}
+
+export interface CandidateDraft {
   sessionId: string;
   messageId: string | null;
   project: string;
@@ -36,6 +45,8 @@ export interface CandidateExtractionResult {
   byRule: Record<string, number>;
 }
 
+export const DEFAULT_CANDIDATE_CONFIDENCE_THRESHOLD = 0.75;
+
 const EXPLICIT_TAG_PATTERN = /(^|\s)(#learn|#skill)\b/i;
 const CORRECTION_PATTERN = /^(no|wrong|actually|i said|i told you|don'?t|please don'?t)\b/i;
 const CORRECTION_NEGATIVE_PATTERN = /^(no worries|no problem|no need|no thanks|actually\s+looks?\s+great)\b/i;
@@ -55,22 +66,35 @@ function hashText(text: string): string {
   return createHash("sha1").update(text).digest("hex").slice(0, 16);
 }
 
-function fallbackMessageId(row: MessageRow): string {
+function fallbackMessageId(row: CandidateMessageRow): string {
   if (row.id) return row.id;
   return `hash:${hashText([row.session_id, row.timestamp, row.role, row.content].join("|"))}`;
 }
 
-function extractDirective(text: string): string {
-  return normalizeWhitespace(
+export function normalizeCandidateDirective(text: string): string {
+  const directive = normalizeWhitespace(
     text
       .replace(/^(no|wrong|actually|i said|i told you|don'?t|please don'?t)[,\s.!-]*/i, "")
       .trim(),
   );
+
+  return directive
+    .toLowerCase()
+    .replace(/[“”"'`]/g, "")
+    .replace(/[.,!?;:()\[\]{}]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function makeDedupeKey(sessionId: string, messageId: string | null, tag: string, extractorRule: string, snippet: string): string {
-  const messagePart = messageId ?? `hash:${hashText([sessionId, tag, extractorRule, snippet].join('|'))}`;
-  return [sessionId, messagePart, tag, extractorRule].join('|');
+export function buildCandidateDedupeKey(
+  sessionId: string,
+  messageId: string | null,
+  tag: string,
+  extractorRule: string,
+  snippet: string,
+): string {
+  const messagePart = messageId ?? `hash:${hashText([sessionId, tag, extractorRule, snippet].join("|"))}`;
+  return [sessionId, messagePart, tag, extractorRule].join("|");
 }
 
 function inferTag(text: string): string {
@@ -83,18 +107,7 @@ function inferTag(text: string): string {
   return "workflow";
 }
 
-function parseToolCalls(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((x): x is string => typeof x === "string");
-  } catch {
-    return [];
-  }
-}
-
-function extractExplicitTagCandidates(messages: MessageRow[]): CandidateDraft[] {
+function extractExplicitTagCandidates(messages: CandidateMessageRow[]): CandidateDraft[] {
   const out: CandidateDraft[] = [];
 
   for (const msg of messages) {
@@ -105,10 +118,10 @@ function extractExplicitTagCandidates(messages: MessageRow[]): CandidateDraft[] 
       project: msg.project,
       tag: inferTag(msg.content),
       snippet: shortSnippet(msg.content),
-      rationale: 'Message explicitly tagged for learning/skill capture',
+      rationale: "Message explicitly tagged for learning/skill capture",
       confidence: 0.92,
-      sourceType: 'explicit_tag',
-      extractorRule: 'explicit_tag',
+      sourceType: "explicit_tag",
+      extractorRule: "explicit_tag",
       timestamp: msg.timestamp,
       evidenceCount: 1,
     });
@@ -117,8 +130,8 @@ function extractExplicitTagCandidates(messages: MessageRow[]): CandidateDraft[] 
   return out;
 }
 
-function extractRepeatedCorrectionCandidates(messages: MessageRow[]): CandidateDraft[] {
-  const directiveMap = new Map<string, { count: number; latest: MessageRow }>();
+function extractRepeatedCorrectionCandidates(messages: CandidateMessageRow[]): CandidateDraft[] {
+  const directiveMap = new Map<string, { count: number; latest: CandidateMessageRow }>();
 
   for (const msg of messages) {
     if (msg.role !== "user") continue;
@@ -127,7 +140,7 @@ function extractRepeatedCorrectionCandidates(messages: MessageRow[]): CandidateD
     if (CORRECTION_NEGATIVE_PATTERN.test(text)) continue;
     if (!CORRECTION_PATTERN.test(text)) continue;
 
-    const directive = extractDirective(text) || text;
+    const directive = normalizeCandidateDirective(text) || text;
     const prev = directiveMap.get(directive);
     if (prev) {
       prev.count += 1;
@@ -160,7 +173,7 @@ function extractRepeatedCorrectionCandidates(messages: MessageRow[]): CandidateD
   return out;
 }
 
-function findNextAssistant(messages: MessageRow[], startIndex: number, window = 5): MessageRow | null {
+function findNextAssistant(messages: CandidateMessageRow[], startIndex: number, window = 5): CandidateMessageRow | null {
   const end = Math.min(messages.length, startIndex + window + 1);
   for (let i = startIndex + 1; i < end; i++) {
     if (messages[i]?.role === "assistant") return messages[i];
@@ -168,8 +181,9 @@ function findNextAssistant(messages: MessageRow[], startIndex: number, window = 
   return null;
 }
 
-function extractFailureFixCandidates(messages: MessageRow[]): CandidateDraft[] {
+function extractFailureFixCandidates(messages: CandidateMessageRow[]): CandidateDraft[] {
   const out: CandidateDraft[] = [];
+  const usedAssistantIds = new Set<string>();
 
   for (let i = 0; i < messages.length; i++) {
     const userMsg = messages[i];
@@ -178,11 +192,14 @@ function extractFailureFixCandidates(messages: MessageRow[]): CandidateDraft[] {
 
     const assistant = findNextAssistant(messages, i, 5);
     if (!assistant) continue;
+
+    const assistantId = fallbackMessageId(assistant);
+    if (usedAssistantIds.has(assistantId)) continue;
     if (!SUCCESS_PATTERN.test(assistant.content)) continue;
 
     out.push({
       sessionId: assistant.session_id,
-      messageId: fallbackMessageId(assistant),
+      messageId: assistantId,
       project: assistant.project,
       tag: inferTag(`${userMsg.content} ${assistant.content}`),
       snippet: shortSnippet(`${shortSnippet(userMsg.content, 120)} -> ${shortSnippet(assistant.content, 120)}`),
@@ -193,21 +210,22 @@ function extractFailureFixCandidates(messages: MessageRow[]): CandidateDraft[] {
       timestamp: assistant.timestamp,
       evidenceCount: 2,
     });
+
+    usedAssistantIds.add(assistantId);
   }
 
   return out;
 }
 
-function extractRepeatedToolSequenceCandidates(messages: MessageRow[]): CandidateDraft[] {
-  const toolSeqMap = new Map<string, { count: number; sample: MessageRow }>();
+function extractRepeatedToolSequenceCandidates(messages: CandidateMessageRow[]): CandidateDraft[] {
+  const toolSeqMap = new Map<string, { count: number; sample: CandidateMessageRow }>();
 
   for (const msg of messages) {
     if (msg.role !== "assistant") continue;
-    const tools = parseToolCalls(msg.tool_calls);
-    if (tools.length === 0) continue;
+    if (msg.tool_calls.length === 0) continue;
     if (!SUCCESS_PATTERN.test(msg.content)) continue;
 
-    const seq = tools.join(" > ");
+    const seq = msg.tool_calls.join(" > ");
     const prev = toolSeqMap.get(seq);
     if (prev) prev.count += 1;
     else toolSeqMap.set(seq, { count: 1, sample: msg });
@@ -235,13 +253,33 @@ function extractRepeatedToolSequenceCandidates(messages: MessageRow[]): Candidat
   return out;
 }
 
-function groupMessagesBySession(rows: MessageRow[]): Map<string, MessageRow[]> {
-  const grouped = new Map<string, MessageRow[]>();
+export function extractCandidateDraftsFromMessages(messages: CandidateMessageRow[]): CandidateDraft[] {
+  return [
+    ...extractExplicitTagCandidates(messages),
+    ...extractRepeatedCorrectionCandidates(messages),
+    ...extractFailureFixCandidates(messages),
+    ...extractRepeatedToolSequenceCandidates(messages),
+  ];
+}
+
+function groupMessagesBySession(rows: CandidateMessageRow[]): Map<string, CandidateMessageRow[]> {
+  const grouped = new Map<string, CandidateMessageRow[]>();
   for (const row of rows) {
     if (!grouped.has(row.session_id)) grouped.set(row.session_id, []);
     grouped.get(row.session_id)!.push(row);
   }
   return grouped;
+}
+
+function parseToolCalls(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string");
+  } catch {
+    return [];
+  }
 }
 
 export function extractCandidatesFromIndexedMessages(
@@ -250,7 +288,7 @@ export function extractCandidatesFromIndexedMessages(
 ): CandidateExtractionResult {
   const db = dbManager.getDb();
 
-  const rows = db.prepare(`
+  const dbRows = db.prepare(`
     SELECT
       m.id,
       m.session_id,
@@ -262,7 +300,12 @@ export function extractCandidatesFromIndexedMessages(
     FROM messages m
     JOIN sessions s ON s.id = m.session_id
     ORDER BY m.session_id, m.timestamp ASC
-  `).all() as MessageRow[];
+  `).all() as DbMessageRow[];
+
+  const rows: CandidateMessageRow[] = dbRows.map((row) => ({
+    ...row,
+    tool_calls: parseToolCalls(row.tool_calls),
+  }));
 
   const grouped = groupMessagesBySession(rows);
   const byRule = new Map<string, number>();
@@ -270,19 +313,21 @@ export function extractCandidatesFromIndexedMessages(
   let candidatesAdded = 0;
   let duplicatesSkipped = 0;
   let lowConfidenceSkipped = 0;
-  const minConfidence = options.minConfidence ?? 0.75;
+  const minConfidence = options.minConfidence ?? DEFAULT_CANDIDATE_CONFIDENCE_THRESHOLD;
   const seenInRun = new Set<string>();
 
   for (const [, messages] of grouped.entries()) {
-    const drafts: CandidateDraft[] = [
-      ...extractExplicitTagCandidates(messages),
-      ...extractRepeatedCorrectionCandidates(messages),
-      ...extractFailureFixCandidates(messages),
-      ...extractRepeatedToolSequenceCandidates(messages),
-    ];
+    const drafts = extractCandidateDraftsFromMessages(messages);
 
     for (const draft of drafts) {
-      const dedupeKey = makeDedupeKey(draft.sessionId, draft.messageId, draft.tag, draft.extractorRule, draft.snippet);
+      const dedupeKey = buildCandidateDedupeKey(
+        draft.sessionId,
+        draft.messageId,
+        draft.tag,
+        draft.extractorRule,
+        draft.snippet,
+      );
+
       if (seenInRun.has(dedupeKey)) {
         duplicatesSkipped++;
         continue;

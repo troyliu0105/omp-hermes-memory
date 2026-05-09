@@ -28,8 +28,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { MemoryStore } from "./store/memory-store.js";
 import { SkillStore } from "./store/skill-store.js";
 import { DatabaseManager } from "./store/db.js";
-import { indexSession } from "./store/session-indexer.js";
-import { parseSessionFile } from "./store/session-parser.js";
+import { indexLatestSessionForCwd } from "./store/session-indexer.js";
 import { registerMemoryTool } from "./tools/memory-tool.js";
 import { registerSkillTool } from "./tools/skill-tool.js";
 import { registerSessionSearchTool } from "./tools/session-search-tool.js";
@@ -134,30 +133,13 @@ export default function (pi: ExtensionAPI) {
   // ── 11. SQLite session search + extended memory ──
   registerSessionSearchTool(pi, dbManager);
   registerMemorySearchTool(pi, dbManager);
-  registerIndexSessionsCommand(pi);
+  registerIndexSessionsCommand(pi, dbManager);
 
   // ── 12. Auto-index session on shutdown ──
   pi.on("session_shutdown", async (_event, _ctx) => {
     try {
-      const fs = require("node:fs");
       const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
-      const cwd = process.cwd();
-      const encodedCwd = cwd.replace(/\//g, "-");
-      const sessionDir = path.join(sessionsDir, encodedCwd);
-
-      if (fs.existsSync(sessionDir)) {
-        // Find the most recent JSONL file (the one we just finished)
-        const files = fs.readdirSync(sessionDir)
-          .filter((f: string) => f.endsWith(".jsonl"))
-          .sort()
-          .reverse();
-        if (files.length > 0) {
-          const sessionData = parseSessionFile(path.join(sessionDir, files[0]));
-          if (sessionData) {
-            indexSession(dbManager, sessionData);
-          }
-        }
-      }
+      indexLatestSessionForCwd(dbManager, process.cwd(), sessionsDir);
     } catch {
       // Silent fail — don't block shutdown
     }
