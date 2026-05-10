@@ -373,6 +373,7 @@ Create `~/.pi/agent/hermes-memory-config.json`:
   "memoryDir": "~/.pi/agent/memory",
   "nudgeInterval": 10,
   "nudgeToolCalls": 15,
+  "reviewRecentMessages": 0,
   "reviewEnabled": true,
   "autoConsolidate": true,
   "correctionDetection": true,
@@ -381,7 +382,8 @@ Create `~/.pi/agent/hermes-memory-config.json`:
   "failureInjectionMaxEntries": 5,
   "flushOnCompact": true,
   "flushOnShutdown": true,
-  "flushMinTurns": 6
+  "flushMinTurns": 6,
+  "flushRecentMessages": 0
 }
 ```
 
@@ -393,6 +395,7 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 | `memoryDir` | `~/.pi/agent/memory` | Custom directory for memory files |
 | `nudgeInterval` | `10` | Turns between auto-reviews |
 | `nudgeToolCalls` | `15` | Tool calls between auto-reviews (OR with turns) |
+| `reviewRecentMessages` | `0` | Recent messages included in background review (`0` = all) |
 | `reviewEnabled` | `true` | Enable/disable background learning loop |
 | `autoConsolidate` | `true` | Auto-merge when memory hits capacity |
 | `correctionDetection` | `true` | Detect user corrections and save immediately |
@@ -402,6 +405,7 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 | `flushOnCompact` | `true` | Flush memories before Pi compacts context |
 | `flushOnShutdown` | `true` | Flush memories when session ends |
 | `flushMinTurns` | `6` | Minimum turns before flush triggers |
+| `flushRecentMessages` | `0` | Recent messages included in session flush (`0` = all) |
 
 ## Where Data Lives
 

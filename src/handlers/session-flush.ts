@@ -8,7 +8,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { MemoryStore } from "../store/memory-store.js";
 import { FLUSH_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";
-import { getMessageText } from "../types.js";
+import { collectMessageParts } from "./message-parts.js";
 
 export function setupSessionFlush(
   pi: ExtensionAPI,
@@ -33,16 +33,7 @@ export function setupSessionFlush(
       return; // Context already stale
     }
 
-    const parts: string[] = [];
-
-    for (const entry of entries) {
-      if (entry.type !== "message") continue;
-      const msg = entry.message;
-      const text = getMessageText(msg);
-      if (!text) continue;
-      const prefix = msg.role === "user" ? "[USER]" : "[ASSISTANT]";
-      parts.push(`${prefix}: ${text}`);
-    }
+    const parts = collectMessageParts(entries, config.flushRecentMessages);
     const flushMessage = [
       FLUSH_PROMPT,
       "",

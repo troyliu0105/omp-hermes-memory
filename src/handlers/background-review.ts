@@ -11,7 +11,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { MemoryStore } from "../store/memory-store.js";
 import { COMBINED_REVIEW_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";
-import { getMessageText } from "../types.js";
+import { applyRecentMessageLimit, collectMessageParts } from "./message-parts.js";
 
 export function setupBackgroundReview(
   pi: ExtensionAPI,
@@ -67,26 +67,19 @@ export function setupBackgroundReview(
     reviewInProgress = true;
 
     // Build conversation snapshot from session entries (crash-safe)
-    let parts: string[] = [];
+    let allParts: string[] = [];
     try {
       const entries = ctx.sessionManager.getBranch();
-
-      for (const entry of entries) {
-        if (entry.type !== "message") continue;
-        const msg = entry.message;
-        const text = getMessageText(msg);
-        if (!text) continue;
-        const prefix = msg.role === "user" ? "[USER]" : "[ASSISTANT]";
-        parts.push(`${prefix}: ${text}`);
-      }
+      allParts = collectMessageParts(entries);
     } catch {
       reviewInProgress = false;
       return; // Session expired or empty — nothing to review
     }
-    if (parts.length < 4) {
+    if (allParts.length < 4) {
       reviewInProgress = false;
       return; // Not enough conversation to review
     }
+    const parts = applyRecentMessageLimit(allParts, config.reviewRecentMessages);
 
     const currentMemory = store.getMemoryEntries().join("\n§\n");
     const currentUser = store.getUserEntries().join("\n§\n");

@@ -58,12 +58,20 @@ function makeCtx(branch: any[] = [], overrides: Record<string, any> = {}) {
 const defaultConfig = {
   reviewEnabled: true,
   nudgeInterval: 10,
+  reviewRecentMessages: 0,
   flushMinTurns: 6,
+  flushRecentMessages: 0,
   flushOnCompact: true,
   flushOnShutdown: true,
   memoryCharLimit: 5000,
   userCharLimit: 5000,
   projectCharLimit: 5000,
+  autoConsolidate: true,
+  correctionDetection: true,
+  failureInjectionEnabled: true,
+  failureInjectionMaxAgeDays: 7,
+  failureInjectionMaxEntries: 5,
+  nudgeToolCalls: 15,
 };
 
 const mockStore = {
@@ -102,6 +110,10 @@ function fireTurnEnd(branch: any[] = makeBranch(10), ctxOverrides: Record<string
 // Allow async handlers to settle
 async function settle(ms = 10) {
   await new Promise((r) => setTimeout(r, ms));
+}
+
+function reviewPrompt(index = execCalls.length - 1): string {
+  return execCalls[index][1][2];
 }
 
 // ─── Tests ───
@@ -257,6 +269,84 @@ describe("setupBackgroundReview", () => {
     await settle();
 
     assert.strictEqual(execCalls.length, 0, "exec should NOT be called for short conversations");
+  });
+
+  it("uses the full conversation by default", async () => {
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, defaultConfig);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+
+    for (let i = 0; i < 10; i++) {
+      fireTurnEnd(makeBranch(10));
+    }
+    await settle();
+
+    const prompt = reviewPrompt();
+    assert.ok(prompt.includes("Message number 0"), "default should include older messages");
+    assert.ok(prompt.includes("Message number 9"), "default should include latest messages");
+  });
+
+  it("limits background review to recent messages when configured", async () => {
+    const config = { ...defaultConfig, reviewRecentMessages: 3 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+
+    for (let i = 0; i < 10; i++) {
+      fireTurnEnd(makeBranch(10));
+    }
+    await settle();
+
+    const prompt = reviewPrompt();
+    assert.ok(!prompt.includes("Message number 6"), "window should exclude older messages");
+    assert.ok(prompt.includes("Message number 7"));
+    assert.ok(prompt.includes("Message number 8"));
+    assert.ok(prompt.includes("Message number 9"));
+  });
+
+  it("does not use the flush recent-message limit for background review", async () => {
+    const config = { ...defaultConfig, flushRecentMessages: 2 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+
+    for (let i = 0; i < 10; i++) {
+      fireTurnEnd(makeBranch(10));
+    }
+    await settle();
+
+    assert.ok(reviewPrompt().includes("Message number 0"), "flush limit must not affect review");
+  });
+
+  it("keeps the short conversation guard based on the full conversation", async () => {
+    const config = { ...defaultConfig, reviewRecentMessages: 2 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+
+    for (let i = 0; i < 10; i++) {
+      fireTurnEnd(makeBranch(4));
+    }
+    await settle();
+
+    assert.strictEqual(execCalls.length, 1, "full conversation has enough parts to review");
+    const prompt = reviewPrompt();
+    assert.ok(!prompt.includes("Message number 0"));
+    assert.ok(!prompt.includes("Message number 1"));
+    assert.ok(prompt.includes("Message number 2"));
+    assert.ok(prompt.includes("Message number 3"));
   });
 
   it("resets turn counter after review triggers", async () => {

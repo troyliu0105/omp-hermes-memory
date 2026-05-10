@@ -9,6 +9,8 @@ import {
   DEFAULT_NUDGE_INTERVAL,
   DEFAULT_FLUSH_MIN_TURNS,
   DEFAULT_NUDGE_TOOL_CALLS,
+  DEFAULT_REVIEW_RECENT_MESSAGES,
+  DEFAULT_FLUSH_RECENT_MESSAGES,
   DEFAULT_FAILURE_INJECTION_MAX_AGE_DAYS,
   DEFAULT_FAILURE_INJECTION_MAX_ENTRIES,
 } from "./constants.js";
@@ -18,10 +20,12 @@ const DEFAULT_CONFIG: MemoryConfig = {
   userCharLimit: DEFAULT_USER_CHAR_LIMIT,
   projectCharLimit: DEFAULT_PROJECT_CHAR_LIMIT,
   nudgeInterval: DEFAULT_NUDGE_INTERVAL,
+  reviewRecentMessages: DEFAULT_REVIEW_RECENT_MESSAGES,
   reviewEnabled: true,
   flushOnCompact: true,
   flushOnShutdown: true,
   flushMinTurns: DEFAULT_FLUSH_MIN_TURNS,
+  flushRecentMessages: DEFAULT_FLUSH_RECENT_MESSAGES,
   autoConsolidate: true,
   correctionDetection: true,
   failureInjectionEnabled: true,
@@ -44,13 +48,18 @@ export function loadConfig(): MemoryConfig {
       const parsed = JSON.parse(raw);
       // Merge: override defaults with user config
       const config: MemoryConfig = { ...DEFAULT_CONFIG };
+      const isNonNegativeNumber = (value: unknown): value is number => (
+        typeof value === "number" && Number.isFinite(value) && value >= 0
+      );
       if (typeof parsed.memoryCharLimit === "number") config.memoryCharLimit = parsed.memoryCharLimit;
       if (typeof parsed.userCharLimit === "number") config.userCharLimit = parsed.userCharLimit;
       if (typeof parsed.nudgeInterval === "number") config.nudgeInterval = parsed.nudgeInterval;
+      if (isNonNegativeNumber(parsed.reviewRecentMessages)) config.reviewRecentMessages = parsed.reviewRecentMessages;
       if (typeof parsed.reviewEnabled === "boolean") config.reviewEnabled = parsed.reviewEnabled;
       if (typeof parsed.flushOnCompact === "boolean") config.flushOnCompact = parsed.flushOnCompact;
       if (typeof parsed.flushOnShutdown === "boolean") config.flushOnShutdown = parsed.flushOnShutdown;
       if (typeof parsed.flushMinTurns === "number") config.flushMinTurns = parsed.flushMinTurns;
+      if (isNonNegativeNumber(parsed.flushRecentMessages)) config.flushRecentMessages = parsed.flushRecentMessages;
       if (typeof parsed.autoConsolidate === "boolean") config.autoConsolidate = parsed.autoConsolidate;
       if (typeof parsed.correctionDetection === "boolean") config.correctionDetection = parsed.correctionDetection;
       if (typeof parsed.failureInjectionEnabled === "boolean") config.failureInjectionEnabled = parsed.failureInjectionEnabled;

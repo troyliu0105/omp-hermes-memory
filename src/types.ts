@@ -13,6 +13,8 @@ export interface MemoryConfig {
   projectCharLimit: number;
   /** Turns between background auto-reviews. Default: 10 */
   nudgeInterval: number;
+  /** Recent conversation messages included in background review. 0 = all. Default: 0 */
+  reviewRecentMessages?: number;
   /** Enable background learning loop. Default: true */
   reviewEnabled: boolean;
   /** Flush memories before compaction. Default: true */
@@ -21,6 +23,8 @@ export interface MemoryConfig {
   flushOnShutdown: boolean;
   /** Minimum user turns before flush triggers. Default: 6 */
   flushMinTurns: number;
+  /** Recent conversation messages included in session flush. 0 = all. Default: 0 */
+  flushRecentMessages?: number;
   /** Override memory directory. Default: ~/.pi/agent/memory */
   memoryDir?: string;
   /** Auto-consolidate when memory is full instead of returning error. Default: true */

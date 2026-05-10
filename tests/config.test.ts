@@ -11,10 +11,12 @@ describe("loadConfig", () => {
     assert.strictEqual(config.memoryCharLimit, 5000);
     assert.strictEqual(config.userCharLimit, 5000);
     assert.strictEqual(config.nudgeInterval, 10);
+    assert.strictEqual(config.reviewRecentMessages, 0);
     assert.strictEqual(config.reviewEnabled, true);
     assert.strictEqual(config.flushOnCompact, true);
     assert.strictEqual(config.flushOnShutdown, true);
     assert.strictEqual(config.flushMinTurns, 6);
+    assert.strictEqual(config.flushRecentMessages, 0);
     assert.strictEqual(config.failureInjectionEnabled, true);
     assert.strictEqual(config.failureInjectionMaxAgeDays, 7);
     assert.strictEqual(config.failureInjectionMaxEntries, 5);
@@ -26,6 +28,8 @@ describe("loadConfig", () => {
     fs.writeFileSync(DEFAULT_CONFIG_PATH, JSON.stringify({
       memoryCharLimit: 3000,
       nudgeInterval: 15,
+      reviewRecentMessages: 25,
+      flushRecentMessages: 40,
       failureInjectionEnabled: false,
       failureInjectionMaxAgeDays: 30,
       failureInjectionMaxEntries: 2,
@@ -33,6 +37,8 @@ describe("loadConfig", () => {
     const config = loadConfig();
     assert.strictEqual(config.memoryCharLimit, 3000);
     assert.strictEqual(config.nudgeInterval, 15);
+    assert.strictEqual(config.reviewRecentMessages, 25);
+    assert.strictEqual(config.flushRecentMessages, 40);
     assert.strictEqual(config.failureInjectionEnabled, false);
     assert.strictEqual(config.failureInjectionMaxAgeDays, 30);
     assert.strictEqual(config.failureInjectionMaxEntries, 2);
@@ -49,6 +55,8 @@ describe("loadConfig", () => {
     const config = loadConfig();
     assert.strictEqual(config.reviewEnabled, false);
     assert.strictEqual(config.memoryCharLimit, 5000); // default
+    assert.strictEqual(config.reviewRecentMessages, 0);
+    assert.strictEqual(config.flushRecentMessages, 0);
     assert.strictEqual(config.failureInjectionEnabled, true);
     assert.strictEqual(config.failureInjectionMaxAgeDays, 7);
     assert.strictEqual(config.failureInjectionMaxEntries, 5);
@@ -71,6 +79,30 @@ describe("loadConfig", () => {
     assert.strictEqual(config.memoryCharLimit, 5000);
     assert.strictEqual(config.userCharLimit, 5000);
     assert.strictEqual(config.nudgeInterval, 10);
+    fs.rmSync(DEFAULT_CONFIG_PATH);
+  });
+
+  it("accepts review and flush recent-message limits independently", () => {
+    fs.mkdirSync(path.dirname(DEFAULT_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(DEFAULT_CONFIG_PATH, JSON.stringify({
+      reviewRecentMessages: 12,
+      flushRecentMessages: 34,
+    }));
+    const config = loadConfig();
+    assert.strictEqual(config.reviewRecentMessages, 12);
+    assert.strictEqual(config.flushRecentMessages, 34);
+    fs.rmSync(DEFAULT_CONFIG_PATH);
+  });
+
+  it("ignores invalid recent-message limits", () => {
+    fs.mkdirSync(path.dirname(DEFAULT_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(DEFAULT_CONFIG_PATH, JSON.stringify({
+      reviewRecentMessages: -1,
+      flushRecentMessages: "5",
+    }));
+    const config = loadConfig();
+    assert.strictEqual(config.reviewRecentMessages, 0);
+    assert.strictEqual(config.flushRecentMessages, 0);
     fs.rmSync(DEFAULT_CONFIG_PATH);
   });
 

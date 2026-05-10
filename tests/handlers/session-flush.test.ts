@@ -45,10 +45,18 @@ function defaultConfig(overrides: Partial<MemoryConfig> = {}): MemoryConfig {
     userCharLimit: 5000,
     projectCharLimit: 5000,
     nudgeInterval: 10,
+    reviewRecentMessages: 0,
     reviewEnabled: true,
     flushOnCompact: true,
     flushOnShutdown: true,
     flushMinTurns: 6,
+    flushRecentMessages: 0,
+    autoConsolidate: true,
+    correctionDetection: true,
+    failureInjectionEnabled: true,
+    failureInjectionMaxAgeDays: 7,
+    failureInjectionMaxEntries: 5,
+    nudgeToolCalls: 15,
     ...overrides,
   };
 }
@@ -213,6 +221,49 @@ describe("setupSessionFlush", () => {
     // Options should include timeout
     assert.ok(opts, "options should be passed");
     assert.equal(opts.timeout, 30000);
+  });
+
+  it("Flush includes the full conversation by default", async () => {
+    const config = defaultConfig();
+    setupSessionFlush(mockPi.pi, mockStore, null, config);
+
+    await emitUserTurns(mockPi.handlers, 8);
+
+    const ctx = { sessionManager: { getBranch: () => mockBranch(8) } };
+    await emit(mockPi.handlers, "session_before_compact", { signal: undefined }, ctx);
+
+    const flushMessage = mockPi.execCalls[0].args[1][2];
+    assert.ok(flushMessage.includes("msg 0"), "default should include older messages");
+    assert.ok(flushMessage.includes("msg 7"), "default should include latest messages");
+  });
+
+  it("Flush limits conversation to recent messages when configured", async () => {
+    const config = defaultConfig({ flushRecentMessages: 3 });
+    setupSessionFlush(mockPi.pi, mockStore, null, config);
+
+    await emitUserTurns(mockPi.handlers, 8);
+
+    const ctx = { sessionManager: { getBranch: () => mockBranch(8) } };
+    await emit(mockPi.handlers, "session_before_compact", { signal: undefined }, ctx);
+
+    const flushMessage = mockPi.execCalls[0].args[1][2];
+    assert.ok(!flushMessage.includes("msg 4"), "window should exclude older messages");
+    assert.ok(flushMessage.includes("msg 5"));
+    assert.ok(flushMessage.includes("msg 6"));
+    assert.ok(flushMessage.includes("msg 7"));
+  });
+
+  it("Flush does not use the review recent-message limit", async () => {
+    const config = defaultConfig({ reviewRecentMessages: 2 });
+    setupSessionFlush(mockPi.pi, mockStore, null, config);
+
+    await emitUserTurns(mockPi.handlers, 8);
+
+    const ctx = { sessionManager: { getBranch: () => mockBranch(8) } };
+    await emit(mockPi.handlers, "session_before_compact", { signal: undefined }, ctx);
+
+    const flushMessage = mockPi.execCalls[0].args[1][2];
+    assert.ok(flushMessage.includes("msg 0"), "review limit must not affect flush");
   });
 
   // ── Error resilience ────────────────────────────────────────────────
