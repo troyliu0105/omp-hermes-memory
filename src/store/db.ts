@@ -1,10 +1,81 @@
-import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { SCHEMA_SQL } from './schema.js';
 
+type StatementLike = {
+  run: (...args: any[]) => any;
+  get: (...args: any[]) => any;
+  all: (...args: any[]) => any;
+};
+
+type DatabaseLike = {
+  prepare: (sql: string) => StatementLike;
+  exec: (sql: string) => void;
+  close: () => void;
+  pragma?: (query: string, options?: any) => any;
+  transaction?: (fn: any) => any;
+};
+
+type DatabaseCtor = new (dbPath: string) => DatabaseLike;
+type BunDatabaseInstance = {
+  prepare: (sql: string) => StatementLike;
+  exec: (sql: string) => void;
+  close: (throwOnError?: boolean) => void;
+  transaction?: (fn: any) => any;
+};
+
+function loadDatabaseCtor(): DatabaseCtor {
+  const require = createRequire(import.meta.url);
+  try {
+    const mod = require('better-sqlite3') as { default?: DatabaseCtor } | DatabaseCtor;
+    return (mod as { default?: DatabaseCtor }).default ?? (mod as DatabaseCtor);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message.toLowerCase() : '';
+    const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+    const isBunIncompat = msg.includes('better-sqlite3 is not yet supported in bun') || msg.includes('not yet supported in bun');
+    if (!isBunIncompat) {
+      throw err;
+    }
+    if (!isBunRuntime) {
+      throw err;
+    }
+
+    const bunSqlite = require('bun:sqlite') as { Database: new (dbPath: string) => BunDatabaseInstance };
+
+    return class BunCompatDatabase implements DatabaseLike {
+      private readonly db: BunDatabaseInstance;
+
+      constructor(dbPath: string) {
+        this.db = new bunSqlite.Database(dbPath);
+      }
+
+      prepare(sql: string): StatementLike {
+        return this.db.prepare(sql);
+      }
+
+      exec(sql: string): void {
+        this.db.exec(sql);
+      }
+
+      close(): void {
+        this.db.close();
+      }
+
+      transaction(fn: any): any {
+        if (!this.db.transaction) {
+          return undefined;
+        }
+        return this.db.transaction(fn);
+      }
+    };
+  }
+}
+
+const Database = loadDatabaseCtor();
+
 export class DatabaseManager {
-  private db: Database.Database | null = null;
+  private db: DatabaseLike | null = null;
   private readonly dbPath: string;
 
   constructor(memoryDir: string) {
@@ -14,7 +85,7 @@ export class DatabaseManager {
   /**
    * Get the database instance. Creates/opens on first call.
    */
-  getDb(): Database.Database {
+  getDb(): DatabaseLike {
     if (!this.db) {
       this.db = this.open();
     }
@@ -24,7 +95,7 @@ export class DatabaseManager {
   /**
    * Open the database and initialize schema.
    */
-  private open(): Database.Database {
+  private open(): DatabaseLike {
     // Ensure directory exists
     const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
@@ -33,9 +104,9 @@ export class DatabaseManager {
 
     const db = new Database(this.dbPath);
 
-    // Enable WAL mode for concurrent reads
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    // Enable WAL mode + FK enforcement for each connection.
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
 
     // Create tables and triggers
     try {
@@ -66,7 +137,7 @@ export class DatabaseManager {
     return msg.includes('no such column: category') || msg.includes('memories(category)');
   }
 
-  private ensureMemoriesColumns(db: Database.Database): void {
+  private ensureMemoriesColumns(db: DatabaseLike): void {
     const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'").get() as { name: string } | undefined;
     if (!tableExists) return;
 
@@ -87,7 +158,7 @@ export class DatabaseManager {
     }
   }
 
-  private migrateLegacyMemoriesTargetConstraint(db: Database.Database): void {
+  private migrateLegacyMemoriesTargetConstraint(db: DatabaseLike): void {
     const tableSqlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='memories'").get() as { sql?: string } | undefined;
     const tableSql = tableSqlRow?.sql ?? '';
     if (!tableSql) return;
@@ -96,9 +167,44 @@ export class DatabaseManager {
     const hasLegacyTargetCheck = /target\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*target\s+IN\s*\(\s*'memory'\s*,\s*'user'\s*\)\s*\)/i.test(tableSql);
     if (!hasLegacyTargetCheck) return;
 
-    const tx = db.transaction(() => {
+    if (!db.transaction) {
       db.exec('PRAGMA foreign_keys = OFF');
+      try {
+        db.exec('BEGIN IMMEDIATE');
+        db.exec(`
+          CREATE TABLE memories_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project TEXT,
+            target TEXT NOT NULL CHECK (target IN ('memory', 'user', 'failure')),
+            category TEXT CHECK (category IN ('failure', 'correction', 'insight', 'preference', 'convention', 'tool-quirk')),
+            content TEXT NOT NULL,
+            failure_reason TEXT,
+            tool_state TEXT,
+            corrected_to TEXT,
+            created DATE NOT NULL,
+            last_referenced DATE NOT NULL
+          );
+        `);
 
+        db.exec(`
+          INSERT INTO memories_new (id, project, target, category, content, failure_reason, tool_state, corrected_to, created, last_referenced)
+          SELECT id, project, target, category, content, failure_reason, tool_state, corrected_to, created, last_referenced
+          FROM memories;
+        `);
+
+        db.exec('DROP TABLE memories');
+        db.exec('ALTER TABLE memories_new RENAME TO memories');
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+      } finally {
+        db.exec('PRAGMA foreign_keys = ON');
+      }
+      return;
+    }
+
+    const tx = db.transaction(() => {
       db.exec(`
         CREATE TABLE memories_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,21 +221,24 @@ export class DatabaseManager {
       `);
 
       db.exec(`
-        INSERT INTO memories_new (id, project, target, category, content, failure_reason, tool_state, corrected_to, created, last_referenced)
-        SELECT id, project, target, category, content, failure_reason, tool_state, corrected_to, created, last_referenced
-        FROM memories;
-      `);
+          INSERT INTO memories_new (id, project, target, category, content, failure_reason, tool_state, corrected_to, created, last_referenced)
+          SELECT id, project, target, category, content, failure_reason, tool_state, corrected_to, created, last_referenced
+          FROM memories;
+        `);
 
       db.exec('DROP TABLE memories');
       db.exec('ALTER TABLE memories_new RENAME TO memories');
-
-      db.exec('PRAGMA foreign_keys = ON');
     });
 
-    tx();
+    db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      tx();
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 
-  private rebuildMemoryFts(db: Database.Database): void {
+  private rebuildMemoryFts(db: DatabaseLike): void {
     const ftsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'").get() as { name?: string } | undefined;
     if (!ftsTable) return;
 

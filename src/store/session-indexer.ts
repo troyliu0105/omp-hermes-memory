@@ -54,7 +54,7 @@ export function indexSession(dbManager: DatabaseManager, session: ParsedSession)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  const insertMany = db.transaction((messages: ParsedSession['messages']) => {
+  const writeMessages = (messages: ParsedSession['messages']) => {
     for (const msg of messages) {
       insertMsg.run(
         msg.id,
@@ -65,9 +65,14 @@ export function indexSession(dbManager: DatabaseManager, session: ParsedSession)
         msg.toolCalls ? JSON.stringify(msg.toolCalls) : null
       );
     }
-  });
+  };
 
-  insertMany(session.messages);
+  if (db.transaction) {
+    const insertMany = db.transaction(writeMessages);
+    insertMany(session.messages);
+  } else {
+    writeMessages(session.messages);
+  }
 
   return { sessionId: session.id, messagesIndexed: session.messages.length, skipped: false };
 }
