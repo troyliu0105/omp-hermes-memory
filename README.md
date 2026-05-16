@@ -321,7 +321,7 @@ This means skills build up naturally over time without you having to ask.
 | Command | What it does |
 |---|---|
 | `/memory-insights` | Shows everything stored in memory and user profile |
-| `/memory-skills` | Lists global and active-project skills with their ids |
+| `/memory-skills` | Opens an interactive skills manager for search, multi-select, move, and delete |
 | `/memory-consolidate` | Manually trigger memory consolidation to free space |
 | `/memory-interview` | Answer a few questions to pre-fill your user profile |
 | `/memory-switch-project` | List all project memories and their entry counts |
@@ -350,25 +350,34 @@ This means skills build up naturally over time without you having to ask.
 3. codes primarily in TypeScript
 ```
 
-### `/memory-skills` Output
+### `/memory-skills` Manager
 
-```
-╔══════════════════════════════════════════════╗
-║            🧠 Procedural Skills             ║
-╚══════════════════════════════════════════════╝
+`/memory-skills` now opens an interactive TUI modal for skill management.
 
-Global Skills
-─────────────
-📄 debug-typescript-errors
-   Step-by-step approach to debugging TS errors in monorepos
-   id: global:debug-typescript-errors
+Features:
+- fuzzy search by skill name
+- single-list view with scope badges (`[G]` global, `[P]` project)
+- multi-select with spacebar
+- batch move to global or current project
+- batch delete with one confirmation
+- inline action summaries for partial success/conflicts
 
-Project Skills (pi-hermes-memory)
-────────────────────────────────
-📄 deploy-checklist
-   Pre-deploy verification steps for this project
-   id: project:pi-hermes-memory:deploy-checklist
-```
+Keybindings:
+- `↑` / `↓` — move focus
+- `space` — toggle selection
+- `/` — focus search
+- `tab` — switch between search and list
+- `g` — move selected skills to global
+- `p` — move selected skills to project
+- `d` — delete selected skills
+- `a` — select all filtered skills
+- `n` — clear selection
+- `esc` — close the modal
+
+Move behavior:
+- moves are **conflict-safe**
+- if the destination already contains the same slug, the conflicting skill stays in place
+- batch moves use partial-success semantics: non-conflicting skills move, blocked skills are reported in the summary
 
 ## Configuration
 
@@ -471,8 +480,9 @@ The `sessions.db` SQLite database stores session history and extended memory ent
 - **Older Markdown memories may need backfill**: If you saved memories before the SQLite mirror existed or search looks stale, run `/memory-sync-markdown`.
 - **Core memory limits still apply**: SQLite search mirroring does not bypass the 5,000-char core Markdown limit. If consolidation cannot free space, the write fails instead of becoming SQLite-only memory invisibly.
 - **System prompts are invisible**: Pi's TUI does not display the system prompt. Use `/memory-preview-context` to inspect whether policy-only or legacy memory injection is active.
-- **Project skill visibility depends on Pi discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a new skill doesn't show up immediately in a running session, trigger a reload/new session so Pi refreshes discovered resources.
-- **Skills are agent-generated**: Skills are created by the agent based on its experience. They may not always be perfectly structured. You can edit or delete them in `~/.pi/agent/skills/` or the active project's `skills/` folder.
+- **Project skill visibility depends on Pi discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a moved or newly created project skill doesn't show up immediately in a running session, trigger a reload/new session so Pi refreshes discovered resources.
+- **Project move requires active project context**: in `/memory-skills`, the `p` hotkey is disabled when Pi is not currently in a detected project directory.
+- **Skills are agent-generated**: Skills are created by the agent based on its experience. They may not always be perfectly structured. You can move, delete, or still edit them directly in `~/.pi/agent/skills/` or the active project's `skills/` folder.
 
 ## Architecture
 
