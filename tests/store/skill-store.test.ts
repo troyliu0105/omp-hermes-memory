@@ -330,6 +330,55 @@ describe("SkillStore", { concurrency: 1 }, () => {
     });
   });
 
+  describe("move()", () => {
+    it("moves a global skill into the active project scope", async () => {
+      const store = await makeStore();
+      const created = await store.create("move-me", "Reusable process", "## Procedure\n1. Do it", "global");
+
+      const result = await store.move(created.skillId!, "project");
+      assert.ok(result.success, `move failed: ${result.error}`);
+      assert.strictEqual(result.skillId, "project:demo-project:move-me");
+      await assert.rejects(fs.access(path.join(GLOBAL_SKILLS_DIR, "move-me", "SKILL.md")));
+      await fs.access(path.join(PROJECT_SKILLS_DIR, "move-me", "SKILL.md"));
+    });
+
+    it("moves a project skill into global scope", async () => {
+      const store = await makeStore();
+      const created = await store.create("repo-runbook", "Project process", "## Procedure\n1. Run it", "project");
+
+      const result = await store.move(created.skillId!, "global");
+      assert.ok(result.success, `move failed: ${result.error}`);
+      assert.strictEqual(result.skillId, "global:repo-runbook");
+      await assert.rejects(fs.access(path.join(PROJECT_SKILLS_DIR, "repo-runbook", "SKILL.md")));
+      await fs.access(path.join(GLOBAL_SKILLS_DIR, "repo-runbook", "SKILL.md"));
+    });
+
+    it("blocks move when destination scope already has the same slug", async () => {
+      const store = await makeStore();
+      const globalSkill = await store.create("same-name", "global skill", "body", "global");
+      const projectSkill = await store.create("same-name", "project skill", "body", "project");
+
+      const result = await store.move(globalSkill.skillId!, "project");
+      assert.ok(!result.success);
+      assert.strictEqual(result.conflictType, "scope-conflict");
+      assert.ok(result.error?.includes("already exists"));
+
+      const globalDoc = await store.loadSkill(globalSkill.skillId!);
+      const projectDoc = await store.loadSkill(projectSkill.skillId!);
+      assert.ok(globalDoc);
+      assert.ok(projectDoc);
+    });
+
+    it("returns an error when moving to project scope without an active project", async () => {
+      const store = await makeStore(false);
+      const created = await store.create("global-skill", "desc", "body", "global");
+
+      const result = await store.move(created.skillId!, "project");
+      assert.ok(!result.success);
+      assert.ok(result.error?.includes("active project"));
+    });
+  });
+
   describe("delete()", () => {
     it("removes the skill file from disk", async () => {
       const store = await makeStore();

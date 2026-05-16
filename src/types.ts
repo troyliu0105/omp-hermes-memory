@@ -142,7 +142,7 @@ export interface SkillResult {
   skillId?: string;
   scope?: SkillScope;
   path?: string;
-  conflictType?: "duplicate" | "similar" | "name-collision";
+  conflictType?: "duplicate" | "similar" | "name-collision" | "scope-conflict";
   similarSkillIds?: string[];
   suggestedAction?: "patch" | "edit" | "rename";
 }
