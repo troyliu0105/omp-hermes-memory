@@ -13,6 +13,11 @@ export interface ProjectInfo {
   memoryDir: string | null;
 }
 
+export interface ProjectSkillInfo extends ProjectInfo {
+  /** Path to the project-scoped skills directory, or null. */
+  skillsDir: string | null;
+}
+
 /**
  * Detect project from the current working directory.
  *
@@ -40,5 +45,13 @@ export function detectProject(projectsMemoryDir = "projects-memory", cwd?: strin
   return {
     name,
     memoryDir: path.join(homeDir, ".pi", "agent", projectsMemoryDir, name),
+  };
+}
+
+export function detectProjectSkills(projectsMemoryDir = "projects-memory", cwd?: string): ProjectSkillInfo {
+  const project = detectProject(projectsMemoryDir, cwd);
+  return {
+    ...project,
+    skillsDir: project.memoryDir ? path.join(project.memoryDir, "skills") : null,
   };
 }

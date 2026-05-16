@@ -10,23 +10,33 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs/promises";
 
-// ─── Helpers ───
+let ROOT_DIR = "";
+let GLOBAL_SKILLS_DIR = "";
+let PROJECT_SKILLS_DIR = "";
 
-let SKILLS_DIR = "";
+async function makeStore(withProject = true): Promise<SkillStore> {
+  ROOT_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "pi-skill-tool-test-"));
+  GLOBAL_SKILLS_DIR = path.join(ROOT_DIR, "global-skills");
+  PROJECT_SKILLS_DIR = path.join(ROOT_DIR, "project-skills");
+  await fs.mkdir(GLOBAL_SKILLS_DIR, { recursive: true });
+  if (withProject) await fs.mkdir(PROJECT_SKILLS_DIR, { recursive: true });
 
-async function makeStore(): Promise<SkillStore> {
-  SKILLS_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "pi-skill-tool-test-"));
-  await fs.mkdir(SKILLS_DIR, { recursive: true });
-  return new SkillStore(SKILLS_DIR);
+  return new SkillStore({
+    globalSkillsDir: GLOBAL_SKILLS_DIR,
+    projectSkillsDir: withProject ? PROJECT_SKILLS_DIR : null,
+    projectName: withProject ? "demo-project" : null,
+    legacySkillsDir: path.join(ROOT_DIR, "legacy-skills"),
+    migrationSentinelPath: path.join(ROOT_DIR, ".skill-migration"),
+  });
 }
 
 async function cleanup(): Promise<void> {
   try {
-    await fs.rm(SKILLS_DIR, { recursive: true, force: true });
-  } catch { /* ignore */ }
+    await fs.rm(ROOT_DIR, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
 }
-
-// ─── Tests ───
 
 describe("registerSkillTool", () => {
   it("registers tool with name 'skill'", async () => {
@@ -56,22 +66,19 @@ describe("registerSkillTool", () => {
     const store = await makeStore();
     registerSkillTool(mockPi, store);
 
-    // Missing name
     let result = await captured.execute("tc-1", { action: "create", description: "desc", content: "body" }, undefined, undefined, undefined);
     assert.strictEqual(JSON.parse(result.content[0].text).success, false);
 
-    // Missing description
     result = await captured.execute("tc-1", { action: "create", name: "test", content: "body" }, undefined, undefined, undefined);
     assert.strictEqual(JSON.parse(result.content[0].text).success, false);
 
-    // Missing content
     result = await captured.execute("tc-1", { action: "create", name: "test", description: "desc" }, undefined, undefined, undefined);
     assert.strictEqual(JSON.parse(result.content[0].text).success, false);
 
     await cleanup();
   });
 
-  it("create succeeds with all params", async () => {
+  it("create succeeds with all params and returns skill_id", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
@@ -89,12 +96,38 @@ describe("registerSkillTool", () => {
 
     const parsed = JSON.parse(result.content[0].text);
     assert.strictEqual(parsed.success, true);
-    assert.ok(parsed.fileName);
+    assert.strictEqual(parsed.skillId, "global:test-skill");
+    assert.strictEqual(parsed.scope, "global");
 
     await cleanup();
   });
 
-  it("view without file_name lists all skills", async () => {
+  it("create supports explicit project scope", async () => {
+    let captured: any;
+    const mockPi = {
+      registerTool: (def: any) => { captured = def; },
+    } as any;
+
+    const store = await makeStore();
+    registerSkillTool(mockPi, store);
+
+    const result = await captured.execute("tc-1", {
+      action: "create",
+      name: "release-app",
+      description: "Release this app",
+      scope: "project",
+      content: "## Procedure\n1. Run pnpm build",
+    }, undefined, undefined, undefined);
+
+    const parsed = JSON.parse(result.content[0].text);
+    assert.strictEqual(parsed.success, true);
+    assert.strictEqual(parsed.skillId, "project:demo-project:release-app");
+    assert.strictEqual(parsed.scope, "project");
+
+    await cleanup();
+  });
+
+  it("view without skill_id lists all skills", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
@@ -102,7 +135,7 @@ describe("registerSkillTool", () => {
 
     const store = await makeStore();
     await store.create("skill-a", "First", "body a");
-    await store.create("skill-b", "Second", "body b");
+    await store.create("skill-b", "Second", "body b", "project");
     registerSkillTool(mockPi, store);
 
     const result = await captured.execute("tc-1", { action: "view" }, undefined, undefined, undefined);
@@ -113,17 +146,17 @@ describe("registerSkillTool", () => {
     await cleanup();
   });
 
-  it("view with file_name returns full document", async () => {
+  it("view with skill_id returns full document", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
     } as any;
 
     const store = await makeStore();
-    await store.create("my-skill", "A skill", "## Body content here");
+    const created = await store.create("my-skill", "A skill", "## Body content here");
     registerSkillTool(mockPi, store);
 
-    const result = await captured.execute("tc-1", { action: "view", file_name: "my-skill.md" }, undefined, undefined, undefined);
+    const result = await captured.execute("tc-1", { action: "view", skill_id: created.skillId }, undefined, undefined, undefined);
     const parsed = JSON.parse(result.content[0].text);
     assert.strictEqual(parsed.success, true);
     assert.strictEqual(parsed.name, "my-skill");
@@ -132,7 +165,7 @@ describe("registerSkillTool", () => {
     await cleanup();
   });
 
-  it("view with invalid file_name returns error", async () => {
+  it("view with invalid skill_id returns error", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
@@ -141,7 +174,7 @@ describe("registerSkillTool", () => {
     const store = await makeStore();
     registerSkillTool(mockPi, store);
 
-    const result = await captured.execute("tc-1", { action: "view", file_name: "missing.md" }, undefined, undefined, undefined);
+    const result = await captured.execute("tc-1", { action: "view", skill_id: "global:missing" }, undefined, undefined, undefined);
     const parsed = JSON.parse(result.content[0].text);
     assert.strictEqual(parsed.success, false);
     assert.ok(parsed.error.includes("not found"));
@@ -149,7 +182,7 @@ describe("registerSkillTool", () => {
     await cleanup();
   });
 
-  it("patch requires file_name, section, content", async () => {
+  it("patch requires skill_id, section, content", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
@@ -158,22 +191,19 @@ describe("registerSkillTool", () => {
     const store = await makeStore();
     registerSkillTool(mockPi, store);
 
-    // Missing file_name
     let result = await captured.execute("tc-1", { action: "patch", section: "Procedure", content: "new" }, undefined, undefined, undefined);
     assert.strictEqual(JSON.parse(result.content[0].text).success, false);
 
-    // Missing section
-    result = await captured.execute("tc-1", { action: "patch", file_name: "test.md", content: "new" }, undefined, undefined, undefined);
+    result = await captured.execute("tc-1", { action: "patch", skill_id: "global:test", content: "new" }, undefined, undefined, undefined);
     assert.strictEqual(JSON.parse(result.content[0].text).success, false);
 
-    // Missing content
-    result = await captured.execute("tc-1", { action: "patch", file_name: "test.md", section: "Procedure" }, undefined, undefined, undefined);
+    result = await captured.execute("tc-1", { action: "patch", skill_id: "global:test", section: "Procedure" }, undefined, undefined, undefined);
     assert.strictEqual(JSON.parse(result.content[0].text).success, false);
 
     await cleanup();
   });
 
-  it("edit requires file_name", async () => {
+  it("edit requires skill_id", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
@@ -185,12 +215,12 @@ describe("registerSkillTool", () => {
     const result = await captured.execute("tc-1", { action: "edit", description: "new desc" }, undefined, undefined, undefined);
     const parsed = JSON.parse(result.content[0].text);
     assert.strictEqual(parsed.success, false);
-    assert.ok(parsed.error.includes("file_name"));
+    assert.ok(parsed.error.includes("skill_id"));
 
     await cleanup();
   });
 
-  it("delete requires file_name", async () => {
+  it("delete requires skill_id", async () => {
     let captured: any;
     const mockPi = {
       registerTool: (def: any) => { captured = def; },
@@ -202,7 +232,7 @@ describe("registerSkillTool", () => {
     const result = await captured.execute("tc-1", { action: "delete" }, undefined, undefined, undefined);
     const parsed = JSON.parse(result.content[0].text);
     assert.strictEqual(parsed.success, false);
-    assert.ok(parsed.error.includes("file_name"));
+    assert.ok(parsed.error.includes("skill_id"));
 
     await cleanup();
   });

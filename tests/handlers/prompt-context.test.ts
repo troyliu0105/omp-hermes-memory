@@ -12,16 +12,11 @@ describe("buildPromptContext", () => {
     formatProjectBlock: (projectName: string) => `<memory-context>PROJECT ${projectName}</memory-context>`,
   } as any;
 
-  const skillStore = {
-    formatIndexForSystemPrompt: async () => "<memory-context>SKILLS</memory-context>",
-  } as any;
-
   it("returns policy only in policy-only mode", async () => {
     const result = await buildPromptContext(
       { memoryMode: "policy-only" },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
@@ -45,7 +40,6 @@ describe("buildPromptContext", () => {
       { memoryMode: "policy-only", memoryPolicyStyle: "full" },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
@@ -57,7 +51,6 @@ describe("buildPromptContext", () => {
       { memoryMode: "policy-only", memoryPolicyStyle: "compact" },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
@@ -75,7 +68,6 @@ describe("buildPromptContext", () => {
       { memoryMode: "policy-only", memoryPolicyStyle: "custom", memoryPolicyCustomText: customText },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
@@ -87,7 +79,6 @@ describe("buildPromptContext", () => {
       { memoryMode: "policy-only", memoryPolicyStyle: "custom", memoryPolicyCustomText: "  \n\t  " },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
@@ -99,7 +90,6 @@ describe("buildPromptContext", () => {
       { memoryMode: "policy-only", memoryPolicyStyle: "none" },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
@@ -111,13 +101,11 @@ describe("buildPromptContext", () => {
       { memoryMode: "legacy-inject", memoryPolicyStyle: "compact" },
       store,
       projectStore,
-      skillStore,
       "demo",
     );
 
     assert.match(result, /MEMORY/);
     assert.match(result, /PROJECT demo/);
-    assert.match(result, /SKILLS/);
     assert.doesNotMatch(result, /<memory-policy>/);
   });
 });

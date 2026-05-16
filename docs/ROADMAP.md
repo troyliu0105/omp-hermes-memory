@@ -131,7 +131,7 @@ Hermes creates skills after complex tasks (5+ tool calls). Skills are SKILL.md f
 **Key insight**: Pi already has a skill system. Our skill tool should write SKILL.md files that are compatible with Pi's skill discovery. This means our skills are immediately usable as Pi slash commands — no separate ecosystem needed.
 
 - [ ] `skill` tool — register via `pi.registerTool()` with actions: `create`, `patch`, `edit`, `delete`
-- [ ] Skill storage in `~/.pi/agent/memory/skills/` (not `~/.pi/agent/skills/` — avoid conflicting with user's own skills)
+- [x] Skill storage split by scope: global skills in `~/.pi/agent/skills/<slug>/SKILL.md`, project skills in `~/.pi/agent/projects-memory/<project>/skills/<slug>/SKILL.md` (discovered via `resources_discover`)
 - [ ] SKILL.md format — compatible with Pi's SKILL.md spec (frontmatter + markdown body)
 - [ ] Progressive disclosure — skill index (name + description only) injected into system prompt, full content loaded on demand via `skill_view` action
 - [ ] Auto-trigger after complex tasks — track tool calls per turn, trigger skill extraction at 5+ tool calls

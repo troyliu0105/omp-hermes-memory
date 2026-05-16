@@ -5,12 +5,21 @@
  * This implements Hermes' "self-evaluation checkpoint" pattern.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "../store/memory-store.js";
 import { SkillStore } from "../store/skill-store.js";
 import { COMBINED_REVIEW_PROMPT, DEFAULT_SKILL_TRIGGER_TOOL_CALLS, ENTRY_DELIMITER } from "../constants.js";
 import type { MemoryConfig } from "../types.js";
 import { getMessageText } from "../types.js";
+
+const proceduralSkillCreatorPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "skills",
+  "procedural-skill-creator",
+);
 
 export function setupSkillAutoTrigger(
   pi: ExtensionAPI,
@@ -71,10 +80,21 @@ export function setupSkillAutoTrigger(
 
       const currentMemory = store.getMemoryEntries().join(ENTRY_DELIMITER);
       const skillIndex = await skillStore.loadIndex();
-      const skillSummary = skillIndex.map((s) => `${s.fileName}: ${s.name} - ${s.description}`).join("\n");
+      const skillSummary = skillIndex
+        .map((skill) => `${skill.skillId} [${skill.scope}]: ${skill.displayName || skill.name} - ${skill.description}`)
+        .join("\n");
+
+      const activeProjectName = skillStore.getProjectName();
+      const scopeLine = activeProjectName
+        ? `Active project context: '${activeProjectName}'. If workflow details depend on this project, use scope='project'; otherwise use scope='global'.`
+        : "No active project context detected. Use scope='global' unless the workflow is clearly project-specific.";
 
       const prompt = [
         "This was a complex task that required multiple tool calls. Extract any reusable procedures as skills.",
+        "A bundled skill named procedural-skill-creator is loaded for you. Read and follow it before deciding whether to create or patch a skill.",
+        "Always pass scope explicitly when creating a skill: scope='global' or scope='project'.",
+        "Choose scope='global' for transferable procedures and scope='project' when the workflow depends on this repo's paths, scripts, architecture, deploy steps, or conventions.",
+        scopeLine,
         "",
         "--- Existing Skills ---",
         skillSummary || "(none)",
@@ -86,11 +106,11 @@ export function setupSkillAutoTrigger(
         recentParts.join("\n\n"),
         "",
         "If a skill should be created, use the skill tool with action 'create'.",
-        "If a related skill already exists, use 'patch' to update it.",
+        "If a related skill already exists, use 'patch' with its skill_id to update it.",
         "If nothing reusable happened, say 'Nothing to extract.' and stop.",
       ].join("\n");
 
-      const result = await pi.exec("pi", ["-p", "--no-session", prompt], {
+      const result = await pi.exec("pi", ["-p", "--no-session", "--skill", proceduralSkillCreatorPath, prompt], {
         signal: ctx.signal,
         timeout: 60000,
       });

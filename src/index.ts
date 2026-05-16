@@ -24,7 +24,7 @@
 
 import * as path from "node:path";
 import * as os from "node:os";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "./store/memory-store.js";
 import { SkillStore } from "./store/skill-store.js";
 import { DatabaseManager } from "./store/db.js";
@@ -48,17 +48,58 @@ import { registerLearnMemoryCommand } from "./handlers/learn-memory.js";
 import { registerSyncMarkdownMemoriesCommand, syncMarkdownMemoriesToSqlite } from "./handlers/sync-markdown-memories.js";
 import { registerPreviewContextCommand } from "./handlers/preview-context.js";
 import { loadConfig } from "./config.js";
-import { detectProject } from "./project.js";
+import { detectProject, detectProjectSkills } from "./project.js";
 import { buildPromptContext } from "./prompt-context.js";
 import { migrateLegacyProjectMemoryDirs } from "./project-memory-migration.js";
+
+export function resolveProjectSkillDiscovery(
+  skillStore: SkillStore,
+  projectsMemoryDir: string | undefined,
+  cwd?: string,
+): { skillPaths: string[] } | undefined {
+  const detected = detectProjectSkills(projectsMemoryDir, cwd);
+  skillStore.setProjectContext(detected.name, detected.skillsDir);
+  if (!detected.skillsDir) return undefined;
+  return {
+    skillPaths: [detected.skillsDir],
+  };
+}
+
+export function registerProjectSkillDiscoveryHandler(
+  pi: Pick<ExtensionAPI, "on">,
+  skillStore: SkillStore,
+  projectsMemoryDir: string | undefined,
+): void {
+  pi.on("resources_discover", async (event, _ctx) => {
+    return resolveProjectSkillDiscovery(skillStore, projectsMemoryDir, (event as { cwd?: string }).cwd);
+  });
+}
 
 export default function (pi: ExtensionAPI) {
   const config = loadConfig();
 
   const globalDir = config.memoryDir ?? path.join(os.homedir(), ".pi", "agent", "memory");
+  const agentRoot = path.join(os.homedir(), ".pi", "agent");
   const store = new MemoryStore(config);
-  const skillStore = new SkillStore(path.join(globalDir, "skills"));
+  const project = detectProject(config.projectsMemoryDir);
+  const projectName = project.name ?? "";
+  const skillStore = new SkillStore({
+    globalSkillsDir: path.join(agentRoot, "skills"),
+    projectSkillsDir: project.memoryDir ? path.join(project.memoryDir, "skills") : null,
+    projectName: project.name,
+    legacySkillsDir: path.join(globalDir, "skills"),
+    migrationSentinelPath: path.join(globalDir, ".skills-migrated-to-pi-native"),
+  });
   const dbManager = new DatabaseManager(globalDir);
+
+  const refreshSkillProjectContext = (cwd?: string) => {
+    const resource = resolveProjectSkillDiscovery(skillStore, config.projectsMemoryDir, cwd);
+    return {
+      name: skillStore.getProjectName(),
+      skillsDir: skillStore.getProjectSkillsDir(),
+      resource,
+    };
+  };
 
   // Keep project memory available for users upgrading from the old
   // ~/.pi/agent/<project>/ layout. This is non-destructive: legacy folders
@@ -71,24 +112,26 @@ export default function (pi: ExtensionAPI) {
   }
 
   // Detect project from cwd using shared helper
-  const project = detectProject(config.projectsMemoryDir);
-
   // Project-scoped store: ~/.pi/agent/<projectsMemoryDir>/<project_name>/
   const projectConfig = project.memoryDir
     ? { ...config, memoryCharLimit: config.projectCharLimit, memoryDir: project.memoryDir }
     : { ...config, memoryDir: undefined };
   const projectStore = project.memoryDir ? new MemoryStore(projectConfig) : null;
-  const projectName = project.name ?? "";
 
   // ── 1. Load memory from disk on session start ──
-  pi.on("session_start", async (_event, _ctx) => {
+  pi.on("session_start", async (event, _ctx) => {
+    refreshSkillProjectContext((event as { cwd?: string }).cwd);
+    await skillStore.migrateLegacySkills();
+    await skillStore.ensureDiscoveredRoots();
     await store.loadFromDisk();
     if (projectStore) await projectStore.loadFromDisk();
   });
 
+  registerProjectSkillDiscoveryHandler(pi, skillStore, config.projectsMemoryDir);
+
   // ── 2. Inject memory policy by default; legacy mode keeps full frozen memory blocks ──
   pi.on("before_agent_start", async (event, _ctx) => {
-    const promptContext = await buildPromptContext(config, store, projectStore, skillStore, projectName);
+    const promptContext = await buildPromptContext(config, store, projectStore, projectName);
 
     if (promptContext) {
       return {
@@ -128,7 +171,7 @@ export default function (pi: ExtensionAPI) {
   registerSwitchProjectCommand(pi, config);
   registerLearnMemoryCommand(pi);
   registerSyncMarkdownMemoriesCommand(pi, dbManager, globalDir, config.projectsMemoryDir);
-  registerPreviewContextCommand(pi, store, projectStore, skillStore, projectName, config);
+  registerPreviewContextCommand(pi, store, projectStore, projectName, config);
 
   // ── 11. SQLite session search + extended memory ──
   registerSessionSearchTool(pi, dbManager);

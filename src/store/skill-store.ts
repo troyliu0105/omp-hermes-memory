@@ -1,111 +1,171 @@
 /**
- * SkillStore — procedural memory stored as SKILL.md files.
+ * SkillStore — procedural memory stored as Pi-native skills.
  *
- * Skills capture HOW to do something (procedural knowledge), as opposed
- * to MemoryStore which captures WHAT (declarative knowledge).
- *
- * Storage: ~/.pi/agent/memory/skills/<slug>.md
- * Format: YAML-like frontmatter + markdown body (no yaml dependency)
- * Progressive disclosure: index (name+description) in system prompt,
- *   full content loaded on demand via skill tool.
+ * Global skills live in ~/.pi/agent/skills/<slug>/SKILL.md.
+ * Project skills live in ~/.pi/agent/<projectsMemoryDir>/<project>/skills/<slug>/SKILL.md.
  */
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { scanContent } from "./content-scanner.js";
-import type { SkillIndex, SkillDocument, SkillResult } from "../types.js";
+import {
+  buildSkillId,
+  exists,
+  formatFrontmatter,
+  jaccardSimilarity,
+  parseFrontmatter,
+  parseSkillId,
+  slugify,
+  today,
+  tokenizeForSimilarity,
+} from "./skill-utils.js";
+import type { SkillDocument, SkillIndex, SkillResult, SkillScope } from "../types.js";
 
-// ─── Frontmatter parsing ───
-
-function parseFrontmatter(raw: string): { meta: Record<string, string>; body: string } {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) return { meta: {}, body: raw };
-
-  const meta: Record<string, string> = {};
-  for (const line of match[1].split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx > 0) {
-      const key = line.slice(0, idx).trim();
-      const value = line.slice(idx + 1).trim();
-      meta[key] = value;
-    }
-  }
-  return { meta, body: match[2].trim() };
+interface SkillStoreOptions {
+  globalSkillsDir?: string;
+  projectSkillsDir?: string | null;
+  projectName?: string | null;
+  legacySkillsDir?: string;
+  migrationSentinelPath?: string;
 }
 
-function formatFrontmatter(doc: Omit<SkillDocument, "fileName">): string {
-  return [
-    "---",
-    `name: ${doc.name}`,
-    `description: ${doc.description}`,
-    `version: ${doc.version}`,
-    `created: ${doc.created}`,
-    `updated: ${doc.updated}`,
-    "---",
-    doc.body,
-  ].join("\n");
+interface SkillLocation {
+  skillId: string;
+  scope: SkillScope;
+  slug: string;
+  fileName: string;
+  path: string;
+  projectName?: string;
 }
 
-// ─── Slugify ───
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 64);
+export interface LegacySkillMigrationResult {
+  migrated: number;
+  skipped: number;
+  warnings: string[];
 }
-
-// ─── SkillStore ───
 
 export class SkillStore {
-  private skillsDir: string;
+  private globalSkillsDir: string;
+  private projectSkillsDir: string | null;
+  private projectName: string | null;
+  private legacySkillsDir: string;
+  private migrationSentinelPath: string;
 
-  constructor(skillsDir?: string) {
-    this.skillsDir = skillsDir ?? path.join(os.homedir(), ".pi", "agent", "memory", "skills");
+  constructor(options: SkillStoreOptions = {}) {
+    const agentRoot = path.join(os.homedir(), ".pi", "agent");
+    this.globalSkillsDir = options.globalSkillsDir ?? path.join(agentRoot, "skills");
+    this.projectSkillsDir = options.projectSkillsDir ?? null;
+    this.projectName = options.projectName ?? null;
+    this.legacySkillsDir = options.legacySkillsDir ?? path.join(agentRoot, "memory", "skills");
+    this.migrationSentinelPath = options.migrationSentinelPath
+      ?? path.join(agentRoot, "memory", ".skills-migrated-to-pi-native");
   }
 
-  // ─── Read ───
+  getGlobalSkillsDir(): string {
+    return this.globalSkillsDir;
+  }
 
-  async loadIndex(): Promise<SkillIndex[]> {
-    await fs.mkdir(this.skillsDir, { recursive: true });
-    const files = await fs.readdir(this.skillsDir);
-    const skills: SkillIndex[] = [];
+  getProjectSkillsDir(): string | null {
+    return this.projectSkillsDir;
+  }
 
-    for (const file of files) {
-      if (!file.endsWith(".md")) continue;
-      const doc = await this.loadSkill(file);
-      if (doc) {
-        skills.push({ fileName: doc.fileName, name: doc.name, description: doc.description });
+  getProjectName(): string | null {
+    return this.projectName;
+  }
+
+  setProjectContext(projectName: string | null, projectSkillsDir: string | null): void {
+    this.projectName = projectName;
+    this.projectSkillsDir = projectSkillsDir;
+  }
+
+  async ensureDiscoveredRoots(): Promise<void> {
+    await fs.mkdir(this.globalSkillsDir, { recursive: true });
+    if (this.projectSkillsDir) {
+      await fs.mkdir(this.projectSkillsDir, { recursive: true });
+    }
+  }
+
+  async migrateLegacySkills(): Promise<LegacySkillMigrationResult> {
+    const result: LegacySkillMigrationResult = { migrated: 0, skipped: 0, warnings: [] };
+
+    if (await exists(this.migrationSentinelPath)) return result;
+
+    await fs.mkdir(path.dirname(this.migrationSentinelPath), { recursive: true });
+
+    try {
+      if (!await exists(this.legacySkillsDir)) return result;
+
+      const files = (await fs.readdir(this.legacySkillsDir))
+        .filter((file) => file.endsWith(".md"))
+        .sort();
+
+      for (const file of files) {
+        const legacyPath = path.join(this.legacySkillsDir, file);
+        try {
+          const raw = await fs.readFile(legacyPath, "utf-8");
+          const parsed = parseFrontmatter(raw);
+          const fallbackSlug = slugify(path.basename(file, ".md"));
+          const slug = slugify(parsed.meta.name || fallbackSlug);
+          if (!slug) {
+            result.skipped++;
+            continue;
+          }
+
+          const targetPath = path.join(this.globalSkillsDir, slug, "SKILL.md");
+          if (await exists(targetPath)) {
+            result.skipped++;
+            continue;
+          }
+
+          const skillDoc = {
+            name: slug,
+            displayName: parsed.meta.display_name?.trim() || parsed.meta.name?.trim() || undefined,
+            description: parsed.meta.description?.trim() || `Migrated legacy skill: ${slug}`,
+            version: Number.parseInt(parsed.meta.version || "1", 10) || 1,
+            created: parsed.meta.created || today(),
+            updated: parsed.meta.updated || today(),
+            body: parsed.body || `# ${slug}\n`,
+          };
+
+          await fs.mkdir(path.dirname(targetPath), { recursive: true });
+          await this.atomicWrite(targetPath, formatFrontmatter(skillDoc));
+          result.migrated++;
+        } catch (error) {
+          result.warnings.push(`${file}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } finally {
+      if (result.warnings.length === 0) {
+        await fs.writeFile(this.migrationSentinelPath, `${new Date().toISOString()}\n`, "utf-8");
       }
     }
 
-    return skills;
+    return result;
   }
 
-  async loadSkill(fileName: string): Promise<SkillDocument | null> {
-    try {
-      const raw = await fs.readFile(path.join(this.skillsDir, fileName), "utf-8");
-      const { meta, body } = parseFrontmatter(raw);
-      if (!meta.name) return null;
-      return {
-        fileName,
-        name: meta.name,
-        description: meta.description || "",
-        version: parseInt(meta.version || "1", 10),
-        created: meta.created || new Date().toISOString().split("T")[0],
-        updated: meta.updated || new Date().toISOString().split("T")[0],
-        body,
-      };
-    } catch {
-      return null;
+  async loadIndex(scope?: SkillScope): Promise<SkillIndex[]> {
+    const locations = await this.collectLocations(scope);
+    const skills: SkillIndex[] = [];
+
+    for (const location of locations) {
+      const doc = await this.readLocation(location);
+      if (doc) skills.push(this.toIndex(doc));
     }
+
+    return skills.sort((a, b) => {
+      if (a.scope !== b.scope) return a.scope.localeCompare(b.scope);
+      return (a.displayName || a.name).localeCompare(b.displayName || b.name);
+    });
   }
 
-  // ─── Write ───
+  async loadSkill(skillId: string): Promise<SkillDocument | null> {
+    const location = await this.findLocationById(skillId);
+    if (!location) return null;
+    return this.readLocation(location);
+  }
 
-  async create(name: string, description: string, body: string): Promise<SkillResult> {
+  async create(name: string, description: string, body: string, scope?: SkillScope): Promise<SkillResult> {
     name = name.trim();
     description = description.trim();
     body = body.trim();
@@ -114,55 +174,92 @@ export class SkillStore {
     if (!description) return { success: false, error: "Skill description is required." };
     if (!body) return { success: false, error: "Skill body is required." };
 
-    // Scan content for security
-    const scanError = scanContent(name + " " + description + " " + body);
+    const scanError = scanContent(`${name} ${description} ${body}`);
     if (scanError) return { success: false, error: scanError };
 
     const slug = slugify(name);
     if (!slug) return { success: false, error: "Skill name produces empty slug." };
 
-    const fileName = `${slug}.md`;
-    const filePath = path.join(this.skillsDir, fileName);
-
-    // Check if file already exists
-    try {
-      await fs.access(filePath);
-      return {
-        success: false,
-        error: `Skill '${name}' already exists (file: ${fileName}). Use 'patch' or 'edit' to update it.`,
-      };
-    } catch {
-      // File doesn't exist — good
+    const resolvedScope = this.resolveScope(scope, name, description, body);
+    const root = this.getScopeRoot(resolvedScope);
+    if (!root) {
+      return { success: false, error: "Project skills require an active project." };
     }
 
-    await fs.mkdir(this.skillsDir, { recursive: true });
+    const skillId = buildSkillId(resolvedScope, slug, this.projectName);
+    const existing = await this.findLocationById(skillId);
+    if (existing) {
+      return {
+        success: false,
+        error: `Skill '${slug}' already exists (${skillId}). Use 'patch' or 'edit' to update it.`,
+        conflictType: "duplicate",
+        similarSkillIds: [skillId],
+        suggestedAction: "patch",
+      };
+    }
 
-    const today = new Date().toISOString().split("T")[0];
-    const doc: Omit<SkillDocument, "fileName"> = {
-      name,
+    if (resolvedScope === "global") {
+      const similarSkillIds = await this.findSimilarGlobalSkillIds(slug, description);
+      if (similarSkillIds.length > 0) {
+        const targetId = similarSkillIds[0];
+        return {
+          success: false,
+          error: `A similar global skill already exists (${targetId}). Enhance the existing skill with new learnings/failures using 'patch' or 'edit' instead of creating a duplicate.`,
+          conflictType: "similar",
+          similarSkillIds,
+          suggestedAction: "patch",
+        };
+      }
+
+      const collidingNameSkillIds = await this.findNameCollisionGlobalSkillIds(slug, description);
+      if (collidingNameSkillIds.length > 0) {
+        const targetId = collidingNameSkillIds[0];
+        return {
+          success: false,
+          error: `A near-name global skill already exists (${targetId}) but with different intent. Use a clearer differentiated name for the new skill, or patch/edit the existing skill if the intent is actually the same.`,
+          conflictType: "name-collision",
+          similarSkillIds: collidingNameSkillIds,
+          suggestedAction: "rename",
+        };
+      }
+    }
+
+    const filePath = path.join(root, slug, "SKILL.md");
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+
+    const displayName = name;
+    const storedName = slug;
+    const stamp = today();
+    await this.atomicWrite(filePath, formatFrontmatter({
+      name: storedName,
+      displayName,
       description,
       version: 1,
-      created: today,
-      updated: today,
+      created: stamp,
+      updated: stamp,
       body,
+    }));
+
+    return {
+      success: true,
+      message: `Skill '${displayName}' created as a ${resolvedScope} skill.`,
+      fileName: path.basename(filePath),
+      skillId,
+      scope: resolvedScope,
+      path: filePath,
     };
-
-    await this.atomicWrite(fileName, formatFrontmatter(doc));
-
-    return { success: true, message: `Skill '${name}' created.`, fileName };
   }
 
-  async patch(fileName: string, section: string, newContent: string): Promise<SkillResult> {
+  async patch(skillId: string, section: string, newContent: string): Promise<SkillResult> {
     newContent = newContent.trim();
     if (!newContent) return { success: false, error: "New content is required for patch." };
 
     const scanError = scanContent(newContent);
     if (scanError) return { success: false, error: scanError };
 
-    const doc = await this.loadSkill(fileName);
-    if (!doc) return { success: false, error: `Skill file '${fileName}' not found.` };
+    const doc = await this.loadSkill(skillId);
+    if (!doc) return { success: false, error: `Skill '${skillId}' not found.` };
 
-    // Replace or append the section in the body
     const sectionHeader = `## ${section}`;
     const lines = doc.body.split("\n");
     let found = false;
@@ -170,45 +267,40 @@ export class SkillStore {
 
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].startsWith(sectionHeader)) {
-        // Replace this section — skip old content until next section or end
         result.push(sectionHeader);
         result.push(newContent);
         found = true;
-        // Skip lines until next ## header or end
         i++;
-        while (i < lines.length && !lines[i].startsWith("## ")) {
-          i++;
-        }
-        // Don't skip the next ## header
-        if (i < lines.length) {
-          result.push(lines[i]);
-        }
+        while (i < lines.length && !lines[i].startsWith("## ")) i++;
+        if (i < lines.length) result.push(lines[i]);
       } else {
         result.push(lines[i]);
       }
     }
 
-    if (!found) {
-      // Append the section
-      result.push("", sectionHeader, newContent);
-    }
+    if (!found) result.push("", sectionHeader, newContent);
 
-    const today = new Date().toISOString().split("T")[0];
-    const updated: Omit<SkillDocument, "fileName"> = {
+    await this.atomicWrite(doc.path, formatFrontmatter({
       name: doc.name,
+      displayName: doc.displayName,
       description: doc.description,
       version: doc.version + 1,
       created: doc.created,
-      updated: today,
+      updated: today(),
       body: result.join("\n").trim(),
+    }));
+
+    return {
+      success: true,
+      message: `Skill '${doc.displayName || doc.name}' section '${section}' updated.`,
+      fileName: doc.fileName,
+      skillId: doc.skillId,
+      scope: doc.scope,
+      path: doc.path,
     };
-
-    await this.atomicWrite(fileName, formatFrontmatter(updated));
-
-    return { success: true, message: `Skill '${doc.name}' section '${section}' updated.`, fileName };
   }
 
-  async edit(fileName: string, description: string, body: string): Promise<SkillResult> {
+  async edit(skillId: string, description: string, body: string): Promise<SkillResult> {
     description = description.trim();
     body = body.trim();
 
@@ -216,91 +308,281 @@ export class SkillStore {
       return { success: false, error: "At least one of description or body is required." };
     }
 
-    const doc = await this.loadSkill(fileName);
-    if (!doc) return { success: false, error: `Skill file '${fileName}' not found.` };
+    const doc = await this.loadSkill(skillId);
+    if (!doc) return { success: false, error: `Skill '${skillId}' not found.` };
 
-    const newDesc = description || doc.description;
+    const newDescription = description || doc.description;
     const newBody = body || doc.body;
-
-    // Scan combined content
-    const scanError = scanContent(newDesc + " " + newBody);
+    const scanError = scanContent(`${newDescription} ${newBody}`);
     if (scanError) return { success: false, error: scanError };
 
-    const today = new Date().toISOString().split("T")[0];
-    const updated: Omit<SkillDocument, "fileName"> = {
+    await this.atomicWrite(doc.path, formatFrontmatter({
       name: doc.name,
-      description: newDesc,
+      displayName: doc.displayName,
+      description: newDescription,
       version: doc.version + 1,
       created: doc.created,
-      updated: today,
+      updated: today(),
       body: newBody,
+    }));
+
+    return {
+      success: true,
+      message: `Skill '${doc.displayName || doc.name}' updated.`,
+      fileName: doc.fileName,
+      skillId: doc.skillId,
+      scope: doc.scope,
+      path: doc.path,
     };
-
-    await this.atomicWrite(fileName, formatFrontmatter(updated));
-
-    return { success: true, message: `Skill '${doc.name}' updated.`, fileName };
   }
 
-  async delete(fileName: string): Promise<SkillResult> {
-    const doc = await this.loadSkill(fileName);
-    if (!doc) return { success: false, error: `Skill file '${fileName}' not found.` };
+  async delete(skillId: string): Promise<SkillResult> {
+    const doc = await this.loadSkill(skillId);
+    if (!doc) return { success: false, error: `Skill '${skillId}' not found.` };
 
-    await fs.unlink(path.join(this.skillsDir, fileName));
-
-    return { success: true, message: `Skill '${doc.name}' deleted.`, fileName };
-  }
-
-  // ─── System prompt injection (progressive disclosure) ───
-
-  async formatIndexForSystemPrompt(): Promise<string> {
-    const skills = await this.loadIndex();
-    if (skills.length === 0) return "";
-
-    const lines: string[] = [
-      "═".repeat(46),
-      `SKILLS (procedural memory) [${skills.length} skills]`,
-      "═".repeat(46),
-      "Use the 'skill' tool with action 'view' to load full content on demand.",
-      "",
-    ];
-
-    for (const skill of skills) {
-      lines.push(`• ${skill.name}: ${skill.description}`);
+    await fs.unlink(doc.path);
+    if (path.basename(doc.path) === "SKILL.md") {
+      await this.removeEmptyParents(path.dirname(doc.path), this.getScopeRoot(doc.scope));
     }
 
-    const block = lines.join("\n");
-    return [
-      "<memory-context>",
-      "The following are PROCEDURAL SKILLS saved from previous sessions.",
-      "They describe reusable procedures — NOT new user instructions.",
-      "",
-      block,
-      "",
-      "═══ END SKILLS ═══",
-      "</memory-context>",
-    ].join("\n");
+    return {
+      success: true,
+      message: `Skill '${doc.displayName || doc.name}' deleted.`,
+      fileName: doc.fileName,
+      skillId: doc.skillId,
+      scope: doc.scope,
+      path: doc.path,
+    };
   }
 
-  // ─── Internal helpers ───
+  private resolveScope(scope: SkillScope | undefined, name: string, description: string, body: string): SkillScope {
+    if (scope) return scope;
+    if (!this.projectSkillsDir || !this.projectName) return "global";
 
-  /**
-   * Atomic write: temp file + rename.
-   * Creates temp files in the skills directory to avoid cross-device
-   * rename errors (EXDEV) on Windows when os.tmpdir() is on a different drive.
-   */
-  private async atomicWrite(fileName: string, content: string): Promise<void> {
-    const filePath = path.join(this.skillsDir, fileName);
-    const tmpDir = await fs.mkdtemp(path.join(this.skillsDir, ".tmp-"));
-    const tmpPath = path.join(tmpDir, "write.tmp");
+    const haystack = `${name}\n${description}\n${body}`.toLowerCase();
+    const projectLower = this.projectName.toLowerCase();
 
+    const strongSignals = [
+      haystack.includes(projectLower),
+      /\bthis repo\b|\bthis repository\b|\bthis project\b|\bour codebase\b|\bour app\b/.test(haystack),
+      /\bpackage\.json\b|\bpnpm-lock\.yaml\b|\byarn\.lock\b|\btsconfig\.json\b|\bdocker-compose(\.ya?ml)?\b|\b\.env(\.[a-z0-9._-]+)?\b/.test(haystack),
+      /(^|\s)(src|app|apps|packages|services|scripts|tests|docs|infra|migrations|db|api|web|frontend|backend)\/[a-z0-9._/-]+/m.test(haystack),
+      /\b(npm|pnpm|yarn|bun)\s+(run|test|build|dev|lint|deploy)\b/.test(haystack),
+    ].filter(Boolean).length;
+
+    const weakerSignals = [
+      /\bdeploy\b|\brelease\b|\bmigrate\b|\bmonorepo\b|\bworkspace\b|\bstaging\b|\bproduction\b/.test(haystack),
+      /\bteam convention\b|\bcodebase convention\b|\brepo convention\b/.test(haystack),
+    ].filter(Boolean).length;
+
+    return strongSignals >= 2 || (strongSignals >= 1 && weakerSignals >= 1) ? "project" : "global";
+  }
+
+  private getScopeRoot(scope: SkillScope): string | null {
+    return scope === "global" ? this.globalSkillsDir : this.projectSkillsDir;
+  }
+
+  private async findSimilarGlobalSkillIds(candidateSlug: string, candidateDescription: string): Promise<string[]> {
+    const NAME_SIMILARITY_THRESHOLD = 0.7;
+    const DESCRIPTION_SIMILARITY_THRESHOLD = 0.75;
+
+    const scored = await this.scoreGlobalSimilarity(candidateSlug, candidateDescription);
+
+    return scored
+      .filter((entry) => entry.nameSimilarity > NAME_SIMILARITY_THRESHOLD
+        && entry.descriptionSimilarity > DESCRIPTION_SIMILARITY_THRESHOLD)
+      .map((entry) => entry.skillId);
+  }
+
+  private async findNameCollisionGlobalSkillIds(candidateSlug: string, candidateDescription: string): Promise<string[]> {
+    const NAME_SIMILARITY_THRESHOLD = 0.7;
+    const DESCRIPTION_SIMILARITY_THRESHOLD = 0.75;
+
+    const scored = await this.scoreGlobalSimilarity(candidateSlug, candidateDescription);
+
+    return scored
+      .filter((entry) => entry.nameSimilarity > NAME_SIMILARITY_THRESHOLD
+        && entry.descriptionSimilarity <= DESCRIPTION_SIMILARITY_THRESHOLD)
+      .map((entry) => entry.skillId);
+  }
+
+  private async scoreGlobalSimilarity(
+    candidateSlug: string,
+    candidateDescription: string,
+  ): Promise<Array<{ skillId: string; nameSimilarity: number; descriptionSimilarity: number }>> {
+    const globals = await this.loadIndex("global");
+    const candidateNameTokens = tokenizeForSimilarity(candidateSlug.replace(/-/g, " "));
+    const candidateDescriptionTokens = tokenizeForSimilarity(candidateDescription);
+
+    return globals
+      .map((skill) => {
+        const nameTokens = tokenizeForSimilarity((skill.displayName || skill.name).replace(/-/g, " "));
+        const descriptionTokens = tokenizeForSimilarity(skill.description || "");
+        const nameSimilarity = jaccardSimilarity(candidateNameTokens, nameTokens);
+        const descriptionSimilarity = jaccardSimilarity(candidateDescriptionTokens, descriptionTokens);
+
+        return {
+          skillId: skill.skillId,
+          nameSimilarity,
+          descriptionSimilarity,
+        };
+      })
+      .sort((a, b) => {
+        const byName = b.nameSimilarity - a.nameSimilarity;
+        if (Math.abs(byName) > 0.0001) return byName;
+        return b.descriptionSimilarity - a.descriptionSimilarity;
+      });
+  }
+
+  private async collectLocations(scope?: SkillScope): Promise<SkillLocation[]> {
+    const locations: SkillLocation[] = [];
+    const seen = new Set<string>();
+
+    if (!scope || scope === "global") {
+      const globalLocations = await this.scanScope(this.globalSkillsDir, "global", true, this.projectName ?? undefined);
+      for (const location of globalLocations) {
+        if (seen.has(location.skillId)) continue;
+        seen.add(location.skillId);
+        locations.push(location);
+      }
+    }
+
+    if ((!scope || scope === "project") && this.projectSkillsDir && this.projectName) {
+      const projectLocations = await this.scanScope(this.projectSkillsDir, "project", false, this.projectName);
+      for (const location of projectLocations) {
+        if (seen.has(location.skillId)) continue;
+        seen.add(location.skillId);
+        locations.push(location);
+      }
+    }
+
+    return locations;
+  }
+
+  private async scanScope(
+    root: string,
+    scope: SkillScope,
+    allowRootMarkdown: boolean,
+    projectName?: string,
+  ): Promise<SkillLocation[]> {
+    if (!await exists(root)) return [];
+    const results: SkillLocation[] = [];
+
+    const walk = async (dir: string, isRoot: boolean): Promise<void> => {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      const dirs = entries.filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+      const files = entries.filter((entry) => entry.isFile()).sort((a, b) => a.name.localeCompare(b.name));
+
+      for (const entry of dirs) {
+        if (entry.name.startsWith(".")) continue;
+        const childDir = path.join(dir, entry.name);
+        const skillFile = path.join(childDir, "SKILL.md");
+        if (await exists(skillFile)) {
+          results.push({
+            skillId: buildSkillId(scope, entry.name, projectName),
+            scope,
+            slug: entry.name,
+            fileName: "SKILL.md",
+            path: skillFile,
+            projectName,
+          });
+        }
+        await walk(childDir, false);
+      }
+
+      if (!isRoot || !allowRootMarkdown) return;
+
+      for (const entry of files) {
+        if (!entry.name.endsWith(".md") || entry.name === "SKILL.md") continue;
+        const slug = slugify(path.basename(entry.name, ".md"));
+        if (!slug) continue;
+        results.push({
+          skillId: buildSkillId(scope, slug, projectName),
+          scope,
+          slug,
+          fileName: entry.name,
+          path: path.join(dir, entry.name),
+          projectName,
+        });
+      }
+    };
+
+    await walk(root, true);
+    return results;
+  }
+
+  private async findLocationById(skillId: string): Promise<SkillLocation | null> {
+    const parsed = parseSkillId(skillId);
+    if (!parsed) return null;
+
+    const locations = await this.collectLocations(parsed.scope);
+    return locations.find((location) => location.skillId === skillId) ?? null;
+  }
+
+  private async readLocation(location: SkillLocation): Promise<SkillDocument | null> {
     try {
-      await fs.writeFile(tmpPath, content, "utf-8");
-      await fs.rename(tmpPath, filePath);
-    } catch (err) {
-      try { await fs.unlink(tmpPath); } catch { /* ignore */ }
-      throw err;
-    } finally {
-      try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      const raw = await fs.readFile(location.path, "utf-8");
+      const { meta, body } = parseFrontmatter(raw);
+      const skillName = meta.name?.trim() || location.slug;
+      const displayName = meta.display_name?.trim() || undefined;
+      return {
+        skillId: location.skillId,
+        scope: location.scope,
+        fileName: location.fileName,
+        path: location.path,
+        projectName: location.projectName,
+        name: skillName,
+        displayName,
+        description: meta.description?.trim() || "",
+        version: Number.parseInt(meta.version || "1", 10) || 1,
+        created: meta.created || today(),
+        updated: meta.updated || today(),
+        body,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private toIndex(doc: SkillDocument): SkillIndex {
+    return {
+      skillId: doc.skillId,
+      scope: doc.scope,
+      fileName: doc.fileName,
+      path: doc.path,
+      projectName: doc.projectName,
+      name: doc.name,
+      displayName: doc.displayName,
+      description: doc.description,
+    };
+  }
+
+  private async atomicWrite(filePath: string, content: string): Promise<void> {
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+
+    const tempFile = path.join(
+      dir,
+      `.${path.basename(filePath)}.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+
+    await fs.writeFile(tempFile, content, "utf-8");
+    await fs.rename(tempFile, filePath);
+  }
+
+  private async removeEmptyParents(startDir: string, stopDir: string | null): Promise<void> {
+    if (!stopDir) return;
+
+    let current = startDir;
+    while (current.startsWith(stopDir) && current !== stopDir) {
+      try {
+        const entries = await fs.readdir(current);
+        if (entries.length > 0) return;
+        await fs.rmdir(current);
+        current = path.dirname(current);
+      } catch {
+        return;
+      }
     }
   }
 }

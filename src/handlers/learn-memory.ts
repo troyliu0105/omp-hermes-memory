@@ -2,7 +2,7 @@
  * Learn memory tool command — /learn-memory-tool teaches users about the memory system.
  */
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
   pi.registerCommand("learn-memory-tool", {
@@ -34,7 +34,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("  🧠 Memory       │ MEMORY.md     │ 5,000 chars");
         lines.push("  👤 User Profile │ USER.md       │ 5,000 chars");
         lines.push("  ⚠️  Failures     │ failures.md   │ 10,000 chars");
-        lines.push("  📚 Skills       │ skills/*.md   │ Unlimited");
+        lines.push("  📚 Skills       │ Pi-native skill dirs │ Unlimited");
         lines.push("  💾 Extended     │ sessions.db   │ Unlimited");
         lines.push("");
         lines.push("  Memory:   Facts — env details, project conventions, tool quirks");
@@ -126,7 +126,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("  8. Session ends       → Final flush");
         lines.push("");
         lines.push("  Legacy mode: set memoryMode=\"legacy-inject\" to restore full");
-        lines.push("  MEMORY.md, USER.md, project memory, failure, and skill prompt blocks.");
+        lines.push("  MEMORY.md, USER.md, project memory, and failure prompt blocks.");
       }
 
       if (section.startsWith("🏗️")) {
@@ -153,7 +153,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("  │ memory_search(\"auth\", cat:\"failure\")│");
         lines.push("  └─────────────────────────────────────┘");
         lines.push("");
-        lines.push("  Legacy mode can still inject full memory/skill blocks for users");
+        lines.push("  Legacy mode can still inject full memory blocks for users");
         lines.push("  who explicitly opt into memoryMode=\"legacy-inject\".");
       }
 

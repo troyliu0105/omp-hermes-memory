@@ -69,7 +69,7 @@ The extension manages three types of knowledge:
 |---|---|---|---|
 | **Memory** (MEMORY.md) | Facts — env details, project conventions, tool quirks | 5,000 chars max | Searchable by default |
 | **User Profile** (USER.md) | Who you are — name, preferences, communication style | 5,000 chars max | Searchable by default |
-| **Skills** (skills/*.md) | Procedures — *how* to do something, reusable across sessions | Unlimited | Available through skill tool |
+| **Skills** (Pi-native `SKILL.md`) | Procedures — *how* to do something, reusable across sessions | Unlimited | Discoverable by Pi + manageable via the skill tool |
 
 ![Memory + Skills Architecture](docs/images/memory-architecture.svg)
 
@@ -119,7 +119,7 @@ System Prompt
 └─────────────────────────────────────────┘
 ```
 
-Set `"memoryPolicyStyle"` to `"full"`, `"compact"`, `"custom"`, or `"none"` to choose policy verbosity while keeping policy-only mode. Set `"memoryMode": "legacy-inject"` to restore the old behavior that injects MEMORY.md, USER.md, project memory, recent failures, and the skill index into the prompt.
+Set `"memoryPolicyStyle"` to `"full"`, `"compact"`, `"custom"`, or `"none"` to choose policy verbosity while keeping policy-only mode. Set `"memoryMode": "legacy-inject"` to restore the old behavior that injects MEMORY.md, USER.md, project memory, and recent failures into the prompt.
 
 ## Failure Memory
 
@@ -177,13 +177,29 @@ The agent also gets a `skill` tool for saving reusable procedures:
 
 | Action | What it does |
 |---|---|
-| `create` | Save a new skill (name, description, step-by-step body) |
-| `view` | Read a skill's full content, or list all skills if no name given |
-| `patch` | Update one section of an existing skill (e.g., just the Procedure section) |
-| `edit` | Replace the description and/or full body of a skill |
-| `delete` | Remove a skill |
+| `create` | Save a new skill (name, description, step-by-step body, optional `scope`) |
+| `view` | Read a skill's full content by `skill_id`, or list all skills if no id is given |
+| `patch` | Update one section of an existing skill by `skill_id` |
+| `edit` | Replace the description and/or full body of a skill by `skill_id` |
+| `delete` | Remove a skill by `skill_id` |
 
-Skills are stored as `SKILL.md` files in `~/.pi/agent/memory/skills/`. Each has a structured body:
+Skills are stored in Pi-native locations:
+
+- Global skills: `~/.pi/agent/skills/<slug>/SKILL.md`
+- Project skills: `~/.pi/agent/projects-memory/<project>/skills/<slug>/SKILL.md`
+
+The extension classifies new skills automatically:
+
+- `global` for transferable procedures
+- `project` for repo-specific workflows tied to local paths, scripts, architecture, deploy steps, or conventions
+
+Global skill creation also has duplicate/similarity guards:
+
+- exact slug match → blocked (update existing via `patch`/`edit`)
+- near-name + high description similarity → blocked as similar (enhance existing)
+- near-name + low description similarity → blocked as name collision (rename to a clearer distinct skill name)
+
+Each skill uses a structured `SKILL.md` body:
 
 ```markdown
 ---
@@ -209,13 +225,23 @@ When you see TypeScript compilation errors, especially in monorepo setups.
 Run `tsc --noEmit` and confirm zero errors.
 ```
 
+### Project Skill Discovery (`resources_discover`)
+
+Project-scoped skills are loaded via Pi's `resources_discover` hook.
+
+On discovery, the extension returns the active project's skills directory as a skill path:
+
+- `~/.pi/agent/projects-memory/<project>/skills/`
+
+This lets Pi discover project skills as native skills without copying them into the global skills folder.
+
 ### Memory vs User Profile vs Skills
 
 | Store | File | What goes here | Limit |
 |---|---|---|---|
 | **memory** | `MEMORY.md` | Agent's notes — env facts, project conventions, tool quirks, lessons learned | 5,000 chars |
 | **user** | `USER.md` | User profile — name, preferences, communication style, habits | 5,000 chars |
-| **skills** | `skills/*.md` | Procedures — *how* to debug, deploy, test, or fix something | Unlimited |
+| **skills** | `~/.pi/agent/skills/<slug>/SKILL.md` or `projects-memory/<project>/skills/<slug>/SKILL.md` | Procedures — *how* to debug, deploy, test, or fix something | Unlimited |
 | **extended** | `sessions.db` | Searchable memories beyond the core limit | Unlimited |
 | **sessions** | `sessions.db` | Past conversation history (searchable via FTS5) | Unlimited |
 
@@ -295,13 +321,13 @@ This means skills build up naturally over time without you having to ask.
 | Command | What it does |
 |---|---|
 | `/memory-insights` | Shows everything stored in memory and user profile |
-| `/memory-skills` | Lists all agent-created skills |
+| `/memory-skills` | Lists global and active-project skills with their ids |
 | `/memory-consolidate` | Manually trigger memory consolidation to free space |
 | `/memory-interview` | Answer a few questions to pre-fill your user profile |
 | `/memory-switch-project` | List all project memories and their entry counts |
 | `/memory-index-sessions` | Import past Pi sessions into the search database |
 | `/memory-sync-markdown` | Backfill Markdown memories into the SQLite search store |
-| `/memory-preview-context` | Preview the memory policy or legacy memory/skill blocks appended to the system prompt |
+| `/memory-preview-context` | Preview the memory policy or legacy memory blocks appended to the system prompt |
 | `/learn-memory-tool` | Skill that teaches users how to use the memory system |
 
 ### `/memory-insights` Output
@@ -331,13 +357,17 @@ This means skills build up naturally over time without you having to ask.
 ║            🧠 Procedural Skills             ║
 ╚══════════════════════════════════════════════╝
 
+Global Skills
+─────────────
 📄 debug-typescript-errors
    Step-by-step approach to debugging TS errors in monorepos
-   file: debug-typescript-errors.md
+   id: global:debug-typescript-errors
 
+Project Skills (pi-hermes-memory)
+────────────────────────────────
 📄 deploy-checklist
    Pre-deploy verification steps for this project
-   file: deploy-checklist.md
+   id: project:pi-hermes-memory:deploy-checklist
 ```
 
 ## Configuration
@@ -373,7 +403,7 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 
 | Setting | Default | Description |
 |---|---|---|
-| `memoryMode` | `policy-only` | Prompt behavior: `policy-only` injects only memory policy; `legacy-inject` restores full memory/skill prompt injection |
+| `memoryMode` | `policy-only` | Prompt behavior: `policy-only` injects only memory policy; `legacy-inject` restores full memory prompt injection |
 | `memoryPolicyStyle` | `full` | Policy text used in `policy-only` mode: `full` preserves the default v0.7 policy; `compact` uses shorter built-in guidance; `custom` uses `memoryPolicyCustomText`; `none` injects no policy text |
 | `memoryPolicyCustomText` | unset | Custom policy text used when `memoryPolicyStyle` is `custom`; blank or missing text falls back to `compact` |
 | `memoryCharLimit` | `5000` | Max characters in MEMORY.md |
@@ -405,23 +435,29 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 
 ```
 ~/.pi/agent/
+├── skills/                ← Global Pi-native skills
+│   ├── debug-typescript-errors/
+│   │   └── SKILL.md
+│   └── testing-checklist/
+│       └── SKILL.md
 ├── projects-memory/       ← ALL project-scoped memories (one subfolder per project)
 │   ├── my-project/
-│   │   └── MEMORY.md
+│   │   ├── MEMORY.md
+│   │   └── skills/
+│   │       └── deploy-checklist/
+│   │           └── SKILL.md
 │   └── another-project/
 │       └── MEMORY.md
 ├── memory/                ← Global memory
 │   ├── MEMORY.md          ← Agent's personal notes (env facts, patterns, lessons)
 │   ├── USER.md            ← User profile (name, preferences, habits)
 │   ├── sessions.db        ← SQLite database (session history + extended memory)
-│   └── skills/
-│       ├── debug-typescript-errors.md
-│       └── deploy-checklist.md
+│   └── .skills-migrated-to-pi-native
 ├── hermes-memory-config.json
 └── ...
 ```
 
-These are plain markdown files. You can read and edit them directly if you want to curate what the agent remembers. Memory entries are separated by `§` (section sign). Skills use standard SKILL.md format with frontmatter.
+These are plain markdown files. You can read and edit them directly if you want to curate what the agent remembers. Memory entries are separated by `§` (section sign). Skills use Pi-compatible `SKILL.md` files with frontmatter.
 
 If you are upgrading from a version that stored project memory directly at `~/.pi/agent/<project>/MEMORY.md`, the extension copies or merges those entries into `~/.pi/agent/projects-memory/<project>/MEMORY.md` on startup. The old folders are left in place as a backup.
 
@@ -435,7 +471,8 @@ The `sessions.db` SQLite database stores session history and extended memory ent
 - **Older Markdown memories may need backfill**: If you saved memories before the SQLite mirror existed or search looks stale, run `/memory-sync-markdown`.
 - **Core memory limits still apply**: SQLite search mirroring does not bypass the 5,000-char core Markdown limit. If consolidation cannot free space, the write fails instead of becoming SQLite-only memory invisibly.
 - **System prompts are invisible**: Pi's TUI does not display the system prompt. Use `/memory-preview-context` to inspect whether policy-only or legacy memory injection is active.
-- **Skills are agent-generated**: Skills are created by the agent based on its experience. They may not always be perfectly structured. You can edit or delete them in `~/.pi/agent/memory/skills/`.
+- **Project skill visibility depends on Pi discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a new skill doesn't show up immediately in a running session, trigger a reload/new session so Pi refreshes discovered resources.
+- **Skills are agent-generated**: Skills are created by the agent based on its experience. They may not always be perfectly structured. You can edit or delete them in `~/.pi/agent/skills/` or the active project's `skills/` folder.
 
 ## Architecture
 

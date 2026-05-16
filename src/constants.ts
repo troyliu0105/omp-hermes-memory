@@ -134,7 +134,7 @@ export const COMBINED_REVIEW_PROMPT = `Review the conversation above and conside
 
 For failures, include: what was tried, why it failed, what error occurred, and what worked instead.
 
-**Skills**: Was a complex, non-trivial approach used to complete a task — one that required trial and error, multiple tool calls, or changing course? If so, save a reusable procedure using the skill tool with action 'create'. Include: when to use it, step-by-step procedure, pitfalls to avoid, and how to verify success. If a related skill already exists, use action 'patch' to update it instead of creating a duplicate.
+**Skills**: Was a complex, non-trivial approach used to complete a task — one that required trial and error, multiple tool calls, or changing course? If so, save a reusable procedure using the skill tool with action 'create'. Always pass scope explicitly on create (scope='global' or scope='project'). Choose scope='global' for transferable procedures and scope='project' when the workflow depends on this repo's paths, scripts, architecture, deploy steps, or conventions. Include: when to use it, step-by-step procedure, pitfalls to avoid, and how to verify success. If a related skill already exists, use action 'patch' with its skill_id instead of creating a duplicate.
 
 Only act if there's something genuinely worth saving. If nothing stands out, just say 'Nothing to save.' and stop.`;
 
@@ -221,12 +221,16 @@ Priority:
 Use the memory tool to save. If this contradicts an existing entry, use 'replace' to update it.`;
 
 // ─── Skill tool description ───
-export const SKILL_TOOL_DESCRIPTION = `Save reusable procedures and patterns as skills that survive across sessions. Skills are procedural memory — they capture HOW to do something, not just what happened.
+export const SKILL_TOOL_DESCRIPTION = `Save reusable procedures and patterns as Pi-native skills that survive across sessions. Skills are procedural memory — they capture HOW to do something, not just what happened.
 
 WHEN TO CREATE A SKILL:
 - After completing a complex task that required trial and error or multiple tool calls
 - When you discover a non-obvious approach that could be reused
 - When the user teaches you a specific workflow or procedure
+
+SCOPE:
+- 'global': transferable procedures that can be reused across repositories
+- 'project': procedures tied to this repo's paths, scripts, architecture, deploy flow, or conventions
 
 WHEN TO UPDATE A SKILL (use 'patch'):
 - You discover a better approach for an existing skill
@@ -238,7 +242,7 @@ SKILL FORMAT:
 - description: one-line summary of when to use it
 - body: structured with sections — ## When to Use, ## Procedure, ## Pitfalls, ## Verification
 
-ACTIONS: create (new skill), view (read full content), patch (update a section), edit (replace description + body), delete (remove skill).`;
+ACTIONS: create (new skill), view (read full content or list), patch (update a section by skill_id), edit (replace description + body by skill_id), delete (remove by skill_id).`;
 
 // ─── Interview prompt (onboarding) ───
 export const INTERVIEW_PROMPT = `You are conducting a brief onboarding interview with a new user. Your goal is to pre-fill their USER PROFILE so future sessions start with context instead of a blank slate.

@@ -2,7 +2,7 @@
  * Shared TypeScript types for the Hermes Memory extension.
  */
 
-import type { TextContent } from "@mariozechner/pi-ai";
+import type { TextContent } from "@earendil-works/pi-ai";
 
 export type MemoryOverflowStrategy = "auto-consolidate" | "reject" | "fifo-evict";
 
@@ -102,12 +102,24 @@ export interface ConsolidationResult {
   error?: string;
 }
 
+export type SkillScope = "global" | "project";
+
 export interface SkillIndex {
-  /** File name (slug.md) */
+  /** Stable id for read/update/delete operations */
+  skillId: string;
+  /** Whether the skill is global or project-scoped */
+  scope: SkillScope;
+  /** File name on disk (usually SKILL.md) */
   fileName: string;
-  /** Human-readable name */
+  /** Absolute path to the skill file */
+  path: string;
+  /** Active project name for project-scoped skills */
+  projectName?: string;
+  /** Pi skill slug stored in frontmatter and folder name */
   name: string;
-  /** Short description for system prompt index */
+  /** Optional human-friendly title preserved for UI output */
+  displayName?: string;
+  /** Short description shown in skill listings */
   description: string;
 }
 
@@ -127,6 +139,12 @@ export interface SkillResult {
   error?: string;
   message?: string;
   fileName?: string;
+  skillId?: string;
+  scope?: SkillScope;
+  path?: string;
+  conflictType?: "duplicate" | "similar" | "name-collision";
+  similarSkillIds?: string[];
+  suggestedAction?: "patch" | "edit" | "rename";
 }
 
 /**

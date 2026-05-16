@@ -7,7 +7,6 @@ describe("registerPreviewContextCommand", () => {
   function setup(opts: {
     memoryBlock?: string;
     projectBlock?: string;
-    skillIndex?: string;
     projectName?: string;
     withProjectStore?: boolean;
     memoryMode?: "policy-only" | "legacy-inject";
@@ -31,15 +30,10 @@ describe("registerPreviewContextCommand", () => {
       ? ({ formatProjectBlock: () => opts.projectBlock ?? "" } as any)
       : null;
 
-    const skillStore = {
-      formatIndexForSystemPrompt: async () => opts.skillIndex ?? "",
-    } as any;
-
     registerPreviewContextCommand(
       mockPi,
       store,
       projectStore,
-      skillStore,
       opts.projectName ?? "demo-project",
       {
         memoryMode: opts.memoryMode ?? "policy-only",
@@ -70,7 +64,6 @@ describe("registerPreviewContextCommand", () => {
     const { handler, ctx, notifyCalls } = setup({
       memoryBlock: "<memory-context>MEM</memory-context>",
       projectBlock: "<memory-context>PROJECT</memory-context>",
-      skillIndex: "<memory-context>SKILLS</memory-context>",
       withProjectStore: true,
     });
 
@@ -129,7 +122,6 @@ describe("registerPreviewContextCommand", () => {
     const { handler, ctx, notifyCalls } = setup({
       memoryBlock: "<memory-context>MEM</memory-context>",
       projectBlock: "<memory-context>PROJECT</memory-context>",
-      skillIndex: "<memory-context>SKILLS</memory-context>",
       withProjectStore: true,
       projectName: "pi-hermes-memory",
       memoryMode: "legacy-inject",
@@ -141,15 +133,13 @@ describe("registerPreviewContextCommand", () => {
     assert.match(out, /Injected Context Preview/);
     assert.match(out, /MEMORY \+ USER \+ RECENT FAILURES/);
     assert.match(out, /PROJECT MEMORY \(pi-hermes-memory\)/);
-    assert.match(out, /SKILL INDEX/);
-    assert.match(out, /Blocks shown: 3/);
+    assert.match(out, /Blocks shown: 2/);
   });
 
   it("shows empty-state guidance when no blocks exist", async () => {
     const { handler, ctx, notifyCalls } = setup({
       memoryBlock: "",
       projectBlock: "",
-      skillIndex: "",
       withProjectStore: false,
       memoryMode: "legacy-inject",
     });

@@ -35,6 +35,7 @@ const mockStore = {
 
 const mockSkillStore = {
   loadIndex: async () => [] as any[],
+  getProjectName: () => "demo-repo",
 } as any;
 
 const config = {
@@ -151,6 +152,18 @@ describe("setupSkillAutoTrigger", () => {
     await settle();
 
     assert.ok(execCalls.length >= 1, "pi.exec should be called with 8+ tool calls and 3 distinct tools");
+    const [cmd, args] = execCalls[0];
+    assert.strictEqual(cmd, "pi");
+    assert.ok(Array.isArray(args), "pi.exec args should be an argv array");
+    assert.ok(args.includes("--skill"), "argv should include --skill");
+    const skillArgIndex = args.indexOf("--skill");
+    assert.ok(skillArgIndex >= 0 && typeof args[skillArgIndex + 1] === "string");
+    assert.match(args[skillArgIndex + 1], /procedural-skill-creator$/);
+
+    const prompt = args[args.length - 1];
+    assert.strictEqual(typeof prompt, "string");
+    assert.match(prompt, /Always pass scope explicitly when creating a skill/i);
+    assert.match(prompt, /Active project context: 'demo-repo'/i);
   });
 
   it("does NOT trigger below 8 tool calls", async () => {

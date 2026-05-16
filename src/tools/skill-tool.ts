@@ -3,9 +3,9 @@
  * Complements the `memory` tool (declarative knowledge) with procedural knowledge.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
 import { SkillStore } from "../store/skill-store.js";
 import { SKILL_TOOL_DESCRIPTION } from "../constants.js";
 
@@ -17,7 +17,8 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
     promptSnippet: "Save or manage reusable procedures and patterns",
     promptGuidelines: [
       "Use the skill tool after completing complex tasks that required trial and error or multiple tool calls.",
-      "Use 'create' to save a new reusable procedure, 'patch' to update a section of an existing skill.",
+      "Use 'create' to save a new reusable procedure, 'patch' to update a section of an existing skill by skill_id.",
+      "Choose scope='global' for transferable procedures and scope='project' when the workflow depends on this repo's paths, scripts, conventions, or deploy steps.",
       "Do NOT use skills for temporary task state — only for durable, reusable procedures.",
     ],
     parameters: Type.Object({
@@ -25,11 +26,14 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
       name: Type.Optional(
         Type.String({ description: "Skill name (for create). e.g., 'debug-typescript-errors'" })
       ),
-      file_name: Type.Optional(
-        Type.String({ description: "Skill file name (for view/patch/edit/delete). e.g., 'debug-typescript-errors.md'" })
+      skill_id: Type.Optional(
+        Type.String({ description: "Stable skill id for view/patch/edit/delete. e.g., 'global:debug-typescript-errors' or 'project:my-repo:release-app'" })
       ),
       description: Type.Optional(
         Type.String({ description: "One-line description of when to use this skill (for create/edit)" })
+      ),
+      scope: Type.Optional(
+        StringEnum(["global", "project"] as const, { description: "Optional creation scope. Omit to let the extension classify it automatically." })
       ),
       section: Type.Optional(
         Type.String({ description: "Section header to patch (for patch action). e.g., 'Procedure', 'Pitfalls'" })
@@ -39,7 +43,7 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
       ),
     }),
     async execute(toolCallId, params, signal, onUpdate, ctx) {
-      const { action, name, file_name, description, section, content } = params;
+      const { action, name, skill_id, description, scope, section, content } = params;
 
       let result;
       switch (action) {
@@ -62,22 +66,21 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
               details: {},
             };
           }
-          result = await store.create(name, description, content);
+          result = await store.create(name, description, content, scope);
           break;
 
         case "view":
-          if (!file_name) {
-            // List all skills
+          if (!skill_id) {
             const index = await store.loadIndex();
             return {
               content: [{ type: "text", text: JSON.stringify({ success: true, skills: index }) }],
               details: { skills: index },
             };
           }
-          const doc = await store.loadSkill(file_name);
+          const doc = await store.loadSkill(skill_id);
           if (!doc) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ success: false, error: `Skill '${file_name}' not found.` }) }],
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: `Skill '${skill_id}' not found.` }) }],
               details: {},
             };
           }
@@ -85,9 +88,9 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
           break;
 
         case "patch":
-          if (!file_name) {
+          if (!skill_id) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ success: false, error: "file_name is required for 'patch' action." }) }],
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: "skill_id is required for 'patch' action." }) }],
               details: {},
             };
           }
@@ -103,27 +106,27 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
               details: {},
             };
           }
-          result = await store.patch(file_name, section, content);
+          result = await store.patch(skill_id, section, content);
           break;
 
         case "edit":
-          if (!file_name) {
+          if (!skill_id) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ success: false, error: "file_name is required for 'edit' action." }) }],
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: "skill_id is required for 'edit' action." }) }],
               details: {},
             };
           }
-          result = await store.edit(file_name, description || "", content || "");
+          result = await store.edit(skill_id, description || "", content || "");
           break;
 
         case "delete":
-          if (!file_name) {
+          if (!skill_id) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ success: false, error: "file_name is required for 'delete' action." }) }],
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: "skill_id is required for 'delete' action." }) }],
               details: {},
             };
           }
-          result = await store.delete(file_name);
+          result = await store.delete(skill_id);
           break;
 
         default:
