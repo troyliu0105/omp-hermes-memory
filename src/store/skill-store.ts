@@ -336,6 +336,143 @@ export class SkillStore {
     };
   }
 
+  async move(skillId: string, targetScope: SkillScope): Promise<SkillResult> {
+    const doc = await this.loadSkill(skillId);
+    if (!doc) return { success: false, error: `Skill '${skillId}' not found.` };
+
+    const parsed = parseSkillId(skillId);
+    if (!parsed) return { success: false, error: `Skill '${skillId}' is invalid.` };
+
+    if (doc.scope === targetScope) {
+      return {
+        success: true,
+        message: `Skill '${doc.displayName || doc.name}' is already ${targetScope}.`,
+        fileName: doc.fileName,
+        skillId: doc.skillId,
+        scope: doc.scope,
+        path: doc.path,
+      };
+    }
+
+    const targetRoot = this.getScopeRoot(targetScope);
+    if (!targetRoot) {
+      return { success: false, error: "Project skills require an active project." };
+    }
+
+    const targetSkillId = buildSkillId(targetScope, parsed.slug, this.projectName);
+    const targetPath = path.join(targetRoot, parsed.slug, "SKILL.md");
+    if (await exists(targetPath)) {
+      return {
+        success: false,
+        error: `Cannot move '${doc.displayName || doc.name}' to ${targetScope}: ${targetSkillId} already exists.`,
+        conflictType: "scope-conflict",
+        similarSkillIds: [targetSkillId],
+        suggestedAction: "rename",
+      };
+    }
+
+    if (targetScope === "global") {
+      const similarSkillIds = await this.findSimilarGlobalSkillIds(parsed.slug, doc.description);
+      if (similarSkillIds.length > 0) {
+        const targetId = similarSkillIds[0];
+        return {
+          success: false,
+          error: `Cannot move '${doc.displayName || doc.name}' to global: a similar global skill already exists (${targetId}).`,
+          conflictType: "similar",
+          similarSkillIds,
+          suggestedAction: "patch",
+        };
+      }
+
+      const collidingNameSkillIds = await this.findNameCollisionGlobalSkillIds(parsed.slug, doc.description);
+      if (collidingNameSkillIds.length > 0) {
+        const targetId = collidingNameSkillIds[0];
+        return {
+          success: false,
+          error: `Cannot move '${doc.displayName || doc.name}' to global: a near-name global skill already exists (${targetId}) with different intent.`,
+          conflictType: "name-collision",
+          similarSkillIds: collidingNameSkillIds,
+          suggestedAction: "rename",
+        };
+      }
+    }
+
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+
+    // Same-filesystem move: use rename first for atomicity and to avoid duplicate windows.
+    try {
+      await fs.rename(doc.path, targetPath);
+
+      if (path.basename(doc.path) === "SKILL.md") {
+        await this.removeEmptyParents(path.dirname(doc.path), this.getScopeRoot(doc.scope));
+      }
+
+      return {
+        success: true,
+        message: `Skill '${doc.displayName || doc.name}' moved to ${targetScope}.`,
+        fileName: path.basename(targetPath),
+        skillId: targetSkillId,
+        scope: targetScope,
+        path: targetPath,
+      };
+    } catch (renameError) {
+      const code = (renameError as NodeJS.ErrnoException)?.code;
+      if (code !== "EXDEV") {
+        return {
+          success: false,
+          error: `Move to ${targetScope} failed before copy for skill '${skillId}'. Source path: ${doc.path}. Destination path: ${targetPath}. Error: ${renameError instanceof Error ? renameError.message : String(renameError)}`,
+        };
+      }
+      // Cross-device fallback below.
+    }
+
+    // Cross-device fallback: copy then remove source.
+    await this.atomicWrite(targetPath, formatFrontmatter({
+      name: parsed.slug,
+      displayName: doc.displayName,
+      description: doc.description,
+      version: doc.version,
+      created: doc.created,
+      updated: doc.updated,
+      body: doc.body,
+    }));
+
+    try {
+      await fs.unlink(doc.path);
+      if (path.basename(doc.path) === "SKILL.md") {
+        await this.removeEmptyParents(path.dirname(doc.path), this.getScopeRoot(doc.scope));
+      }
+    } catch (error) {
+      // Best-effort rollback: remove the destination copy if source removal fails,
+      // so we do not silently leave duplicate skills across scopes.
+      let rollbackFailed = false;
+      try {
+        await fs.unlink(targetPath);
+        if (path.basename(targetPath) === "SKILL.md") {
+          await this.removeEmptyParents(path.dirname(targetPath), this.getScopeRoot(targetScope));
+        }
+      } catch {
+        rollbackFailed = true;
+      }
+
+      return {
+        success: false,
+        error: rollbackFailed
+          ? `Move to ${targetScope} failed while removing source skill '${skillId}', and rollback also failed. Source path: ${doc.path}. Destination path: ${targetPath}. Error: ${error instanceof Error ? error.message : String(error)}`
+          : `Move to ${targetScope} failed while removing source skill '${skillId}'. Rolled back destination copy. Source path: ${doc.path}. Destination path: ${targetPath}. Error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Skill '${doc.displayName || doc.name}' moved to ${targetScope}.`,
+      fileName: path.basename(targetPath),
+      skillId: targetSkillId,
+      scope: targetScope,
+      path: targetPath,
+    };
+  }
+
   async delete(skillId: string): Promise<SkillResult> {
     const doc = await this.loadSkill(skillId);
     if (!doc) return { success: false, error: `Skill '${skillId}' not found.` };
