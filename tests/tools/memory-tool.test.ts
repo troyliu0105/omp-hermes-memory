@@ -10,7 +10,7 @@ import { registerMemoryTool } from "../../src/tools/memory-tool.js";
 import { MemoryStore } from "../../src/store/memory-store.js";
 import { DatabaseManager } from "../../src/store/db.js";
 import { getMemories, syncMemoryEntry } from "../../src/store/sqlite-memory-store.js";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 describe("registerMemoryTool", () => {
   let tmpDir: string;

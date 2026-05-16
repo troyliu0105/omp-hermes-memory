@@ -4,7 +4,7 @@
  * See PLAN.md → "Hermes Source File Reference Map" for source lines.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "../store/memory-store.js";
 import { FLUSH_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";

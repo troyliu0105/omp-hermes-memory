@@ -592,9 +592,9 @@ export class MemoryStore {
 ### `memory-tool.ts`
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
 import { MemoryStore } from "./memory-store.js";
 import { MEMORY_TOOL_DESCRIPTION } from "./constants.js";
 
@@ -649,7 +649,7 @@ export function registerMemoryTool(pi: ExtensionAPI, store: MemoryStore): void {
 ### `background-review.ts`
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "./memory-store.js";
 import { COMBINED_REVIEW_PROMPT } from "./constants.js";
 import type { MemoryConfig } from "./types.js";
@@ -725,7 +725,7 @@ export function setupBackgroundReview(
 ### `session-flush.ts`
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "./memory-store.js";
 import { FLUSH_PROMPT } from "./constants.js";
 import type { MemoryConfig } from "./types.js";
@@ -803,7 +803,7 @@ export function setupSessionFlush(
 ### `insights.ts`
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "./memory-store.js";
 
 export function registerInsightsCommand(pi: ExtensionAPI, store: MemoryStore): void {
@@ -857,7 +857,7 @@ export function registerInsightsCommand(pi: ExtensionAPI, store: MemoryStore): v
 ### `index.ts` — Extension Entry Point
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "./memory-store.js";
 import { registerMemoryTool } from "./memory-tool.js";
 import { setupBackgroundReview } from "./background-review.js";
@@ -926,9 +926,9 @@ export default function (pi: ExtensionAPI) {
     "extensions": ["./src/index.ts"]
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.1.0",
+    "@earendil-works/pi-coding-agent": ">=0.1.0",
     "typebox": ">=1.0.0",
-    "@mariozechner/pi-ai": ">=0.1.0"
+    "@earendil-works/pi-ai": ">=0.1.0"
   },
   "keywords": ["pi", "memory", "learning", "agent"],
   "license": "MIT"

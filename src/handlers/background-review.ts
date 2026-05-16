@@ -7,7 +7,7 @@
  * keeping us within Pi's intended extension API.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { MemoryStore } from "../store/memory-store.js";
 import { COMBINED_REVIEW_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";

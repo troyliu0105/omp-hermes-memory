@@ -45,11 +45,11 @@
     "url": "https://github.com/chandra447/pi-hermes-memory"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.70.0"
+    "@earendil-works/pi-coding-agent": ">=0.74.0"
   },
   "devDependencies": {
-    "@mariozechner/pi-ai": "^0.70.0",
-    "@mariozechner/pi-coding-agent": "^0.70.0",
+    "@earendil-works/pi-ai": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "@types/better-sqlite3": "^7.6.13",
     "tsx": "^4.21.0",
     "typebox": "^1.1.33",
