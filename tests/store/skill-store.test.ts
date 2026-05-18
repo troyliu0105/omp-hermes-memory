@@ -13,6 +13,7 @@ let ROOT_DIR = "";
 let GLOBAL_SKILLS_DIR = "";
 let PROJECT_SKILLS_DIR = "";
 let LEGACY_SKILLS_DIR = "";
+let LEGACY_PI_GLOBAL_SKILLS_DIR = "";
 let MIGRATION_SENTINEL = "";
 
 async function makeStore(withProject = true): Promise<SkillStore> {
@@ -21,6 +22,7 @@ async function makeStore(withProject = true): Promise<SkillStore> {
     projectSkillsDir: withProject ? PROJECT_SKILLS_DIR : null,
     projectName: withProject ? "demo-project" : null,
     legacySkillsDir: LEGACY_SKILLS_DIR,
+    legacyPiGlobalSkillsDir: LEGACY_PI_GLOBAL_SKILLS_DIR,
     migrationSentinelPath: MIGRATION_SENTINEL,
   });
 }
@@ -34,6 +36,7 @@ async function cleanSlate(): Promise<void> {
   await fs.mkdir(GLOBAL_SKILLS_DIR, { recursive: true });
   await fs.mkdir(PROJECT_SKILLS_DIR, { recursive: true });
   await fs.mkdir(LEGACY_SKILLS_DIR, { recursive: true });
+  await fs.mkdir(LEGACY_PI_GLOBAL_SKILLS_DIR, { recursive: true });
 }
 
 async function readFile(filePath: string): Promise<string> {
@@ -46,6 +49,7 @@ describe("SkillStore", { concurrency: 1 }, () => {
     GLOBAL_SKILLS_DIR = path.join(ROOT_DIR, "global-skills");
     PROJECT_SKILLS_DIR = path.join(ROOT_DIR, "project-skills");
     LEGACY_SKILLS_DIR = path.join(ROOT_DIR, "legacy-skills");
+    LEGACY_PI_GLOBAL_SKILLS_DIR = path.join(ROOT_DIR, "legacy-pi-global-skills");
     MIGRATION_SENTINEL = path.join(ROOT_DIR, ".skill-migration");
   });
 
