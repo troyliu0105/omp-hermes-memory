@@ -81,100 +81,79 @@ const OPTIONAL_STRUCTURED_SKILL_FIELDS = {
   })),
 } as const;
 
-const SKILL_TOOL_PARAMETERS = Type.Union([
-  Type.Object({
-    action: Type.Literal("create"),
+const SKILL_TOOL_PARAMETERS = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    action: StringEnum(["create", "view", "patch", "update", "edit", "delete"] as const, {
+      description: "The skill action to perform.",
+    }),
     name: Type.String({ description: "Skill name. e.g., 'debug-typescript-errors'" }),
-    description: Type.String({ description: "One-line description of when to use this skill." }),
-    scope: StringEnum(["global", "project"] as const, {
-      description: "Required for create. Use 'global' for portable procedures and 'project' for repo-specific workflows.",
-    }),
-    content: Type.String({
-      description: "Raw markdown body for the skill. Structured fields are also allowed, but content is used directly when present.",
-    }),
-    ...OPTIONAL_STRUCTURED_SKILL_FIELDS,
-  }),
-  Type.Object({
-    action: Type.Literal("create"),
-    name: Type.String({ description: "Skill name. e.g., 'debug-typescript-errors'" }),
-    description: Type.String({ description: "One-line description of when to use this skill." }),
-    scope: StringEnum(["global", "project"] as const, {
-      description: "Required for create. Use 'global' for portable procedures and 'project' for repo-specific workflows.",
-    }),
-    ...STRUCTURED_SKILL_FIELDS,
-    content: Type.Optional(Type.String({
-      description: "Optional raw markdown body. If present, it takes precedence over structured fields.",
-    })),
-  }),
-  Type.Object({
-    action: Type.Literal("view"),
-    skill_id: Type.Optional(SKILL_ID_PARAM),
-  }),
-  Type.Object({
-    action: Type.Literal("patch"),
     skill_id: SKILL_ID_PARAM,
+    description: Type.String({ description: "One-line description of when to use this skill." }),
+    scope: StringEnum(["global", "project"] as const, {
+      description: "Use 'global' for portable procedures and 'project' for repo-specific workflows.",
+    }),
     section: Type.String({ description: "Section header to patch. e.g., 'Procedure', 'Pitfalls'" }),
-    content: Type.String({ description: "New section content for the patch." }),
-  }),
-  Type.Object({
-    action: Type.Literal("update"),
-    skill_id: SKILL_ID_PARAM,
-    description: Type.String({ description: "Updated one-line description of when to use this skill." }),
-    content: Type.Optional(Type.String({
-      description: "Optional raw markdown body for the update. If omitted, structured fields can be used instead.",
-    })),
-    ...OPTIONAL_STRUCTURED_SKILL_FIELDS,
-  }),
-  Type.Object({
-    action: Type.Literal("update"),
-    skill_id: SKILL_ID_PARAM,
     content: Type.String({
-      description: "Updated raw markdown body for the skill.",
+      description: "Raw markdown body for create/update, or new section content for patch.",
     }),
-    description: Type.Optional(Type.String({ description: "Optional updated one-line description." })),
-    ...OPTIONAL_STRUCTURED_SKILL_FIELDS,
-  }),
-  Type.Object({
-    action: Type.Literal("update"),
-    skill_id: SKILL_ID_PARAM,
-    ...STRUCTURED_SKILL_FIELDS,
-    description: Type.Optional(Type.String({ description: "Optional updated one-line description." })),
-    content: Type.Optional(Type.String({
-      description: "Optional raw markdown body. If present, it takes precedence over structured fields.",
-    })),
-  }),
-  Type.Object({
-    action: Type.Literal("edit"),
-    skill_id: SKILL_ID_PARAM,
-    description: Type.String({ description: "Updated one-line description of when to use this skill." }),
-    content: Type.Optional(Type.String({
-      description: "Optional raw markdown body for the update. If omitted, structured fields can be used instead.",
-    })),
-    ...OPTIONAL_STRUCTURED_SKILL_FIELDS,
-  }),
-  Type.Object({
-    action: Type.Literal("edit"),
-    skill_id: SKILL_ID_PARAM,
-    content: Type.String({
-      description: "Updated raw markdown body for the skill.",
+    when_to_use: STRUCTURED_SKILL_FIELDS.when_to_use,
+    procedure_steps: STRUCTURED_SKILL_FIELDS.procedure_steps,
+    pitfalls: Type.Array(Type.String(), {
+      description: "Optional common mistakes, caveats, or failure modes to avoid.",
     }),
-    description: Type.Optional(Type.String({ description: "Optional updated one-line description." })),
-    ...OPTIONAL_STRUCTURED_SKILL_FIELDS,
-  }),
-  Type.Object({
-    action: Type.Literal("edit"),
-    skill_id: SKILL_ID_PARAM,
-    ...STRUCTURED_SKILL_FIELDS,
-    description: Type.Optional(Type.String({ description: "Optional updated one-line description." })),
-    content: Type.Optional(Type.String({
-      description: "Optional raw markdown body. If present, it takes precedence over structured fields.",
-    })),
-  }),
-  Type.Object({
-    action: Type.Literal("delete"),
-    skill_id: SKILL_ID_PARAM,
-  }),
-]);
+    verification_steps: STRUCTURED_SKILL_FIELDS.verification_steps,
+  },
+  required: ["action"],
+  allOf: [
+    {
+      if: {
+        properties: { action: { const: "create" } },
+        required: ["action"],
+      },
+      then: {
+        required: ["name", "description", "scope"],
+        anyOf: [
+          { required: ["content"] },
+          { required: ["when_to_use", "procedure_steps", "verification_steps"] },
+        ],
+      },
+    },
+    {
+      if: {
+        properties: { action: { const: "patch" } },
+        required: ["action"],
+      },
+      then: {
+        required: ["skill_id", "section", "content"],
+      },
+    },
+    {
+      if: {
+        properties: { action: { enum: ["update", "edit"] } },
+        required: ["action"],
+      },
+      then: {
+        required: ["skill_id"],
+        anyOf: [
+          { required: ["description"] },
+          { required: ["content"] },
+          { required: ["when_to_use", "procedure_steps", "verification_steps"] },
+        ],
+      },
+    },
+    {
+      if: {
+        properties: { action: { const: "delete" } },
+        required: ["action"],
+      },
+      then: {
+        required: ["skill_id"],
+      },
+    },
+  ],
+} as const;
 
 export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
   pi.registerTool({
