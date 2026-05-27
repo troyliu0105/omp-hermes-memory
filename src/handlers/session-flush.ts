@@ -9,6 +9,7 @@ import { MemoryStore } from "../store/memory-store.js";
 import { FLUSH_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";
 import { collectMessageParts } from "./message-parts.js";
+import { execChildPrompt } from "./pi-child-process.js";
 
 export function setupSessionFlush(
   pi: ExtensionAPI,
@@ -42,9 +43,9 @@ export function setupSessionFlush(
     ].join("\n");
 
     try {
-      await pi.exec("pi", ["-p", "--no-session", flushMessage], {
+      await execChildPrompt(pi, flushMessage, config, {
         signal,
-        timeout: timeoutMs,
+        timeoutMs,
       });
     } catch {
       // Best-effort flush — never block shutdown

@@ -323,6 +323,29 @@ describe("setupCorrectionDetector handler", () => {
     assert.ok(execCalls.length >= 1, "pi.exec should be called on correction");
   });
 
+  it("passes child LLM override args and defaults thinking to off when only a model override is set", async () => {
+    const pi = createMockPi();
+    setupCorrectionDetector(pi, mockStore, null, {
+      ...config,
+      llmModelOverride: "openrouter/deepseek/deepseek-v4-flash",
+    });
+
+    const branch = [
+      { type: "message", message: { role: "user", content: [{ type: "text", text: "don't do that" }] } },
+      { type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+    ];
+
+    fireMessageEnd("user", "don't do that");
+    fireTurnEnd(branch);
+    await settle();
+
+    const cmdArgs: string[] = execCalls[0][1];
+    assert.deepStrictEqual(
+      cmdArgs.slice(0, 6),
+      ["-p", "--no-session", "--model", "openrouter/deepseek/deepseek-v4-flash", "--thinking", "off"],
+    );
+  });
+
   it("does NOT trigger on normal messages", async () => {
     const pi = createMockPi();
     setupCorrectionDetector(pi, mockStore, null, config);

@@ -12,6 +12,7 @@ import { MemoryStore } from "../store/memory-store.js";
 import { COMBINED_REVIEW_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";
 import { applyRecentMessageLimit, collectMessageParts } from "./message-parts.js";
+import { execChildPrompt } from "./pi-child-process.js";
 
 export function setupBackgroundReview(
   pi: ExtensionAPI,
@@ -116,9 +117,9 @@ export function setupBackgroundReview(
     // We intentionally omit ctx.signal — the signal is tied to the turn
     // lifetime and would abort the subprocess before it finishes now that
     // we're not awaiting. The timeout (120s) provides its own safety net.
-    const reviewPromise = pi.exec("pi", ["-p", "--no-session", reviewPrompt.join("\n")], {
+    const reviewPromise = execChildPrompt(pi, reviewPrompt.join("\n"), config, {
       signal: undefined,
-      timeout: 120000,
+      timeoutMs: 120000,
     });
 
     reviewPromise

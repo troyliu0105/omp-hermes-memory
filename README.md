@@ -424,6 +424,8 @@ Create `~/.pi/agent/hermes-memory-config.json`:
   "memoryDir": "~/.pi/agent/pi-hermes-memory",
   "projectsMemoryDir": "projects-memory",
   "sessionSearch": { "variant": "legacy" },
+  "llmModelOverride": "openrouter/deepseek/deepseek-v4-flash",
+  "llmThinkingOverride": "off",
   "nudgeInterval": 10,
   "nudgeToolCalls": 15,
   "reviewRecentMessages": 0,
@@ -453,6 +455,8 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 | `memoryDir` | `~/.pi/agent/pi-hermes-memory` | Custom directory for extension storage files |
 | `projectsMemoryDir` | `projects-memory` | Subdirectory under `~/.pi/agent/` for project-scoped memory |
 | `sessionSearch` | `{ "variant": "legacy" }` | Session search implementation: `legacy` keeps the existing SQLite/FTS snippet search; `anchors` uses the opt-in Markdown request surface and returns compact JSONL line-range anchors from `~/.pi/agent/sessions/` |
+| `llmModelOverride` | unset | Optional model override for child `pi -p` subprocess calls used by background review, correction save, session flush, and consolidation |
+| `llmThinkingOverride` | unset | Optional thinking override for those child subprocess calls; valid values are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. If `llmModelOverride` is set and this is omitted, child calls default to `off` |
 | `nudgeInterval` | `10` | Turns between auto-reviews |
 | `nudgeToolCalls` | `15` | Tool calls between auto-reviews (OR with turns) |
 | `reviewRecentMessages` | `0` | Recent messages included in background review (`0` = all) |

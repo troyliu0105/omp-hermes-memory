@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import type { MemoryConfig, MemoryOverflowStrategy, SessionSearchVariant } from "./types.js";
+import type { MemoryConfig, MemoryOverflowStrategy, SessionSearchVariant, ThinkingLevel } from "./types.js";
 import {
   DEFAULT_MEMORY_CHAR_LIMIT,
   DEFAULT_USER_CHAR_LIMIT,
@@ -20,6 +20,7 @@ import { normalizeConfiguredMemoryDir, normalizeProjectsMemoryDir } from "./path
 
 const MEMORY_OVERFLOW_STRATEGIES: readonly MemoryOverflowStrategy[] = ["auto-consolidate", "reject", "fifo-evict"];
 const SESSION_SEARCH_VARIANTS: readonly SessionSearchVariant[] = ["legacy", "anchors"];
+const THINKING_LEVELS: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
 function isMemoryOverflowStrategy(value: unknown): value is MemoryOverflowStrategy {
   return typeof value === "string" && MEMORY_OVERFLOW_STRATEGIES.includes(value as MemoryOverflowStrategy);
@@ -27,6 +28,10 @@ function isMemoryOverflowStrategy(value: unknown): value is MemoryOverflowStrate
 
 function isSessionSearchVariant(value: unknown): value is SessionSearchVariant {
   return typeof value === "string" && SESSION_SEARCH_VARIANTS.includes(value as SessionSearchVariant);
+}
+
+function isThinkingLevel(value: unknown): value is ThinkingLevel {
+  return typeof value === "string" && THINKING_LEVELS.includes(value as ThinkingLevel);
 }
 
 const DEFAULT_CONFIG: MemoryConfig = {
@@ -127,6 +132,11 @@ export function loadConfig(configPath = DEFAULT_CONFIG_PATH): MemoryConfig {
       ) {
         config.sessionSearch = { variant: parsed.sessionSearch.variant };
       }
+      if (typeof parsed.llmModelOverride === "string") {
+        const trimmed = parsed.llmModelOverride.trim();
+        if (trimmed.length > 0) config.llmModelOverride = trimmed;
+      }
+      if (isThinkingLevel(parsed.llmThinkingOverride)) config.llmThinkingOverride = parsed.llmThinkingOverride;
       if (hasMemoryOverflowStrategy) {
         config.autoConsolidate = config.memoryOverflowStrategy === "auto-consolidate";
       } else if (hasLegacyAutoConsolidate) {

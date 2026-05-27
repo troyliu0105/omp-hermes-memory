@@ -175,6 +175,30 @@ describe("setupBackgroundReview", () => {
     assert.doesNotMatch(prompt, /save a reusable procedure using the skill tool/i);
   });
 
+  it("passes child LLM override args to the review subprocess", async () => {
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, {
+      ...defaultConfig,
+      llmModelOverride: "openrouter/deepseek/deepseek-v4-flash",
+      llmThinkingOverride: "minimal",
+    });
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+
+    for (let i = 0; i < 10; i++) {
+      fireTurnEnd();
+    }
+    await settle();
+
+    const cmdArgs: string[] = execCalls[0][1];
+    assert.deepStrictEqual(
+      cmdArgs.slice(0, 6),
+      ["-p", "--no-session", "--model", "openrouter/deepseek/deepseek-v4-flash", "--thinking", "minimal"],
+    );
+  });
+
   it("does NOT trigger review when reviewEnabled is false", async () => {
     const config = { ...defaultConfig, reviewEnabled: false };
     const pi = createMockPi();

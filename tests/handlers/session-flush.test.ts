@@ -224,6 +224,25 @@ describe("setupSessionFlush", () => {
     assert.equal(opts.timeout, 30000);
   });
 
+  it("passes child LLM override args to flush subprocesses", async () => {
+    const config = defaultConfig({
+      llmModelOverride: "openrouter/deepseek/deepseek-v4-flash",
+      llmThinkingOverride: "low",
+    });
+    setupSessionFlush(mockPi.pi, mockStore, null, config);
+
+    await emitUserTurns(mockPi.handlers, 8);
+
+    const ctx = { sessionManager: { getBranch: () => mockBranch(4) } };
+    await emit(mockPi.handlers, "session_before_compact", { signal: undefined }, ctx);
+
+    const [, args] = mockPi.execCalls[0].args;
+    assert.deepStrictEqual(
+      args.slice(0, 6),
+      ["-p", "--no-session", "--model", "openrouter/deepseek/deepseek-v4-flash", "--thinking", "low"],
+    );
+  });
+
   it("Flush includes the full conversation by default", async () => {
     const config = defaultConfig();
     setupSessionFlush(mockPi.pi, mockStore, null, config);

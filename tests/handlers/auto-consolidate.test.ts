@@ -110,6 +110,69 @@ describe("triggerConsolidation", () => {
     assert.ok(prompt.includes("Target: 'project'"), "prompt should tell the child agent to use target='project'");
   });
 
+  it("retries once without overrides when the override subprocess fails for model resolution reasons", async () => {
+    const pi = {
+      on: () => {},
+      exec: async (...args: any[]) => {
+        execCalls.push(args);
+        if (execCalls.length === 1) {
+          return { code: 1, stdout: "", stderr: "model not found" };
+        }
+        return { code: 0, stdout: "Consolidated", stderr: "" };
+      },
+      registerTool: () => {},
+      registerCommand: () => {},
+    } as any;
+
+    const result = await triggerConsolidation(
+      pi,
+      mockStore,
+      "memory",
+      undefined,
+      60000,
+      "memory",
+      { llmModelOverride: "openrouter/deepseek/deepseek-v4-flash" },
+    );
+
+    assert.strictEqual(result.consolidated, true);
+    assert.strictEqual(execCalls.length, 2, "should retry once without overrides");
+    assert.deepStrictEqual(execCalls[0][1].slice(0, 6), [
+      "-p",
+      "--no-session",
+      "--model",
+      "openrouter/deepseek/deepseek-v4-flash",
+      "--thinking",
+      "off",
+    ]);
+    assert.deepStrictEqual(execCalls[1][1].slice(0, 2), ["-p", "--no-session"]);
+    assert.strictEqual(execCalls[1][1].length, 3, "fallback retry should drop model/thinking overrides");
+  });
+
+  it("does not retry generic consolidation failures that are unrelated to override resolution", async () => {
+    const pi = {
+      on: () => {},
+      exec: async (...args: any[]) => {
+        execCalls.push(args);
+        return { code: 1, stdout: "", stderr: "memory tool returned no changes" };
+      },
+      registerTool: () => {},
+      registerCommand: () => {},
+    } as any;
+
+    const result = await triggerConsolidation(
+      pi,
+      mockStore,
+      "memory",
+      undefined,
+      60000,
+      "memory",
+      { llmModelOverride: "openrouter/deepseek/deepseek-v4-flash" },
+    );
+
+    assert.strictEqual(result.consolidated, false);
+    assert.strictEqual(execCalls.length, 1, "should not retry generic consolidation failures");
+  });
+
   it("handles empty entries gracefully", async () => {
     const emptyStore = {
       getMemoryEntries: () => [],

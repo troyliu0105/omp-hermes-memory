@@ -8,6 +8,8 @@ export type MemoryOverflowStrategy = "auto-consolidate" | "reject" | "fifo-evict
 
 export type SessionSearchVariant = "legacy" | "anchors";
 
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export interface SessionSearchConfig {
   /** Session search implementation variant. Default: legacy */
   variant: SessionSearchVariant;
@@ -46,6 +48,10 @@ export interface MemoryConfig {
   projectsMemoryDir?: string;
   /** Session search configuration. Default: { variant: "legacy" } */
   sessionSearch?: SessionSearchConfig;
+  /** Override model used for child pi -p subprocess LLM calls. Default: unset */
+  llmModelOverride?: string;
+  /** Override thinking level used for child pi -p subprocess LLM calls. Default: unset */
+  llmThinkingOverride?: ThinkingLevel;
   /** Strategy when memory is full. Default: auto-consolidate */
   memoryOverflowStrategy?: MemoryOverflowStrategy;
   /** Legacy alias for memoryOverflowStrategy. Default: true */

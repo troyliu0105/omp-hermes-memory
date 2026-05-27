@@ -33,6 +33,8 @@ describe("loadConfig", () => {
     assert.strictEqual(config.failureInjectionMaxEntries, 5);
     assert.strictEqual(config.projectsMemoryDir, "projects-memory");
     assert.deepStrictEqual(config.sessionSearch, { variant: "legacy" });
+    assert.strictEqual(config.llmModelOverride, undefined);
+    assert.strictEqual(config.llmThinkingOverride, undefined);
   });
 
   it("overrides defaults when config file exists", () => {
@@ -50,6 +52,8 @@ describe("loadConfig", () => {
       failureInjectionMaxAgeDays: 30,
       failureInjectionMaxEntries: 2,
       projectsMemoryDir: "my-memory",
+      llmModelOverride: " openrouter/deepseek/deepseek-v4-flash ",
+      llmThinkingOverride: "minimal",
     }));
     const config = loadConfig(TEST_CONFIG_PATH);
     assert.strictEqual(config.memoryMode, "legacy-inject");
@@ -63,6 +67,8 @@ describe("loadConfig", () => {
     assert.strictEqual(config.failureInjectionMaxAgeDays, 30);
     assert.strictEqual(config.failureInjectionMaxEntries, 2);
     assert.strictEqual(config.projectsMemoryDir, "my-memory");
+    assert.strictEqual(config.llmModelOverride, "openrouter/deepseek/deepseek-v4-flash");
+    assert.strictEqual(config.llmThinkingOverride, "minimal");
     // Unset values use defaults
     assert.strictEqual(config.userCharLimit, 5000);
     assert.strictEqual(config.reviewEnabled, true);
@@ -82,6 +88,8 @@ describe("loadConfig", () => {
     assert.strictEqual(config.failureInjectionMaxAgeDays, 7);
     assert.strictEqual(config.failureInjectionMaxEntries, 5);
     assert.strictEqual(config.projectsMemoryDir, "projects-memory");
+    assert.strictEqual(config.llmModelOverride, undefined);
+    assert.strictEqual(config.llmThinkingOverride, undefined);
   });
 
   it("expands ~/ memoryDir into an absolute home path", () => {
@@ -256,6 +264,27 @@ describe("loadConfig", () => {
       const config = loadConfig(TEST_CONFIG_PATH);
       assert.deepStrictEqual(config.sessionSearch, { variant });
     }
+  });
+
+  it("accepts valid llmThinkingOverride values and ignores invalid ones", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+
+    for (const level of ["off", "minimal", "low", "medium", "high", "xhigh"] as const) {
+      fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ llmThinkingOverride: level }));
+      const config = loadConfig(TEST_CONFIG_PATH);
+      assert.strictEqual(config.llmThinkingOverride, level);
+    }
+
+    fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ llmThinkingOverride: "ultra" }));
+    const invalid = loadConfig(TEST_CONFIG_PATH);
+    assert.strictEqual(invalid.llmThinkingOverride, undefined);
+  });
+
+  it("ignores blank llmModelOverride values", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ llmModelOverride: "   " }));
+    const config = loadConfig(TEST_CONFIG_PATH);
+    assert.strictEqual(config.llmModelOverride, undefined);
   });
 
   it("ignores invalid sessionSearch variants", () => {
