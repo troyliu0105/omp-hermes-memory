@@ -143,6 +143,7 @@ describe("MemoryStore", { concurrency: 1 }, () => {
       assert.ok(result.usage!.includes("chars"));
       assert.equal(result.entry_count, 1);
       assert.equal(result.message, "Entry added.");
+      assert.equal(result.entries, undefined);
 
       const raw = await readRaw(memoryPath);
       assert.ok(raw.includes(`${TEST_MARKER} project uses pnpm`));
@@ -355,6 +356,47 @@ describe("MemoryStore", { concurrency: 1 }, () => {
     });
   });
 
+  describe("addFailure()", () => {
+    it("applies failure-target char limits", async () => {
+      const store = new MemoryStore(makeConfig({ memoryCharLimit: 40 }));
+      await store.loadFromDisk();
+
+      const result = await store.addFailure(`${TEST_MARKER} ${"x".repeat(120)}`, {
+        category: "failure",
+      });
+      await settle();
+
+      assert.ok(!result.success);
+      assert.ok(result.error);
+      assert.ok(result.error!.includes("exceed the limit"));
+    });
+
+    it("deduplicates exact failure memories", async () => {
+      const store = new MemoryStore(makeConfig());
+      await store.loadFromDisk();
+
+      const first = await store.addFailure(`${TEST_MARKER} use pnpm`, {
+        category: "correction",
+        failureReason: "npm rewrote the lockfile",
+      });
+      const second = await store.addFailure(`${TEST_MARKER} use pnpm`, {
+        category: "correction",
+        failureReason: "npm rewrote the lockfile",
+      });
+      await settle();
+
+      assert.ok(first.success);
+      assert.equal(first.message, "Failure memory saved: correction");
+      assert.ok(second.success);
+      assert.equal(second.message, "Entry already exists (no duplicate added).");
+      assert.equal(second.entry_count, 1);
+
+      const raw = await readRaw(failurePath);
+      const count = raw.split(ENTRY_DELIMITER).filter(Boolean).length;
+      assert.equal(count, 1);
+    });
+  });
+
   // ─── replace() tests ───
 
   describe("replace()", () => {
@@ -370,6 +412,7 @@ describe("MemoryStore", { concurrency: 1 }, () => {
 
       assert.ok(result.success);
       assert.equal(result.message, "Entry replaced.");
+      assert.equal(result.entries, undefined);
 
       const raw = await readRaw(memoryPath);
       assert.ok(!raw.includes(`${TEST_MARKER} uses vim`));
@@ -445,10 +488,47 @@ describe("MemoryStore", { concurrency: 1 }, () => {
       assert.ok(result.success);
       assert.equal(result.message, "Entry removed.");
       assert.equal(result.entry_count, 1);
+      assert.equal(result.entries, undefined);
 
       const raw = await readRaw(memoryPath);
       assert.ok(!raw.includes(`${TEST_MARKER} to be removed`));
       assert.ok(raw.includes(`${TEST_MARKER} to keep`));
+    });
+
+    it("accepts a pasted memory_search line for normal memories", async () => {
+      const store = new MemoryStore(makeConfig());
+      await store.loadFromDisk();
+
+      await store.add("memory", `${TEST_MARKER} prefers pnpm over npm`);
+      await settle();
+
+      const result = await store.remove("memory", `🧠 [global] ${TEST_MARKER} prefers pnpm over npm\n   Created: 2026-05-27 | Last used: 2026-05-27`);
+      await settle();
+
+      assert.ok(result.success);
+      const raw = await readRaw(memoryPath);
+      assert.equal(raw.trim(), "");
+    });
+
+    it("accepts a pasted memory_search line for failure memories", async () => {
+      const store = new MemoryStore(makeConfig());
+      await store.loadFromDisk();
+
+      await store.addFailure(`${TEST_MARKER} use pnpm`, {
+        category: "correction",
+        failureReason: "npm rewrote the lockfile",
+      });
+      await settle();
+
+      const result = await store.remove(
+        "failure",
+        `⚠️ [global] [correction] [correction] ${TEST_MARKER} use pnpm\n   Created: 2026-05-27 | Last used: 2026-05-27`,
+      );
+      await settle();
+
+      assert.ok(result.success);
+      const raw = await readRaw(failurePath);
+      assert.equal(raw.trim(), "");
     });
 
     it("returns error when no match found", async () => {

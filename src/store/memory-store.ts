@@ -15,6 +15,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { scanContent } from "./content-scanner.js";
+import { normalizeMemoryLookupText } from "./memory-lookup.js";
 import {
   ENTRY_DELIMITER,
   DEFAULT_MEMORY_CHAR_LIMIT,
@@ -117,32 +118,17 @@ export class MemoryStore {
     correctedTo?: string;
     project?: string;
   }): Promise<MemoryResult> {
-    content = content.trim();
-    if (!content) return { success: false, error: "Content cannot be empty." };
+    const failureText = this.buildFailureMemoryText(content, options);
+    const result = await this._add("failure", failureText);
 
-    const scanError = scanContent(content);
-    if (scanError) return { success: false, error: scanError };
-
-    const categoryTag = "[" + options.category + "]";
-    const parts = [categoryTag + " " + content];
-    if (options.failureReason) parts.push("Failed: " + options.failureReason);
-    if (options.toolState) parts.push("Tool state: " + options.toolState);
-    if (options.correctedTo) parts.push("Corrected to: " + options.correctedTo);
-    if (options.project) parts.push("Project: " + options.project);
-
-    const failureText = parts.join(" — ");
-    const today = new Date().toISOString().split("T")[0];
-    const encoded = this.encodeEntry(failureText, today, today);
-
-    this.failureEntries.push(encoded);
-    await this.saveToDisk("failure");
-
-    return {
-      success: true,
-      target: "failure",
-      message: "Failure memory saved: " + options.category,
-      entry_count: this.failureEntries.length,
-    };
+    if (!result.success) return result;
+    if (result.message === "Entry added.") {
+      return {
+        ...result,
+        message: "Failure memory saved: " + options.category,
+      };
+    }
+    return result;
   }
 
   getFailureEntries(maxAgeDays = 7): string[] {
@@ -253,7 +239,7 @@ export class MemoryStore {
   }
 
   async replace(target: "memory" | "user" | "failure", oldText: string, newContent: string): Promise<MemoryResult> {
-    oldText = oldText.trim();
+    oldText = normalizeMemoryLookupText(oldText);
     newContent = newContent.trim();
     if (!oldText) return { success: false, error: "old_text cannot be empty." };
     if (!newContent) return { success: false, error: "new_content cannot be empty. Use 'remove' to delete entries." };
@@ -299,18 +285,18 @@ export class MemoryStore {
   }
 
   async remove(target: "memory" | "user" | "failure", oldText: string): Promise<MemoryResult> {
-    oldText = oldText.trim();
+    oldText = normalizeMemoryLookupText(oldText);
     if (!oldText) return { success: false, error: "old_text cannot be empty." };
 
     const entries = this.entriesFor(target);
-    const matches = entries.filter((e) => e.includes(oldText));
+    const matches = entries.filter((e) => this.stripMetadata(e).includes(oldText));
 
     if (matches.length === 0) return { success: false, error: `No entry matched '${oldText}'.` };
     if (matches.length > 1 && new Set(matches).size > 1) {
       return {
         success: false,
         error: `Multiple entries matched '${oldText}'. Be more specific.`,
-        matches: matches.map((e) => e.slice(0, 80) + (e.length > 80 ? "..." : "")),
+        matches: matches.map((e) => this.stripMetadata(e).slice(0, 80) + (this.stripMetadata(e).length > 80 ? "..." : "")),
       };
     }
 
@@ -392,6 +378,23 @@ export class MemoryStore {
     return this.decodeEntry(text).text;
   }
 
+  private buildFailureMemoryText(content: string, options: {
+    category: MemoryCategory;
+    failureReason?: string;
+    toolState?: string;
+    correctedTo?: string;
+    project?: string;
+  }): string {
+    const trimmedContent = content.trim();
+    const categoryTag = "[" + options.category + "]";
+    const parts = [categoryTag + " " + trimmedContent];
+    if (options.failureReason) parts.push("Failed: " + options.failureReason);
+    if (options.toolState) parts.push("Tool state: " + options.toolState);
+    if (options.correctedTo) parts.push("Corrected to: " + options.correctedTo);
+    if (options.project) parts.push("Project: " + options.project);
+    return parts.join(" — ");
+  }
+
   private successResponse(target: "memory" | "user" | "failure", message?: string): MemoryResult {
     const entries = this.entriesFor(target);
     const current = this.charCount(target);
@@ -401,7 +404,6 @@ export class MemoryStore {
     const resp: MemoryResult = {
       success: true,
       target,
-      entries,
       usage: `${pct}% — ${current}/${limit} chars`,
       entry_count: entries.length,
     };

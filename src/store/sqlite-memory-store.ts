@@ -1,5 +1,6 @@
 import { DatabaseManager } from './db.js';
 import { isFts5QueryError, normalizeFts5Query } from './fts-query.js';
+import { normalizeMemoryLookupText } from './memory-lookup.js';
 import type { MemoryCategory } from '../types.js';
 
 const MEMORY_SELECT_COLUMNS = `
@@ -421,10 +422,12 @@ export function replaceSyncedMemories(
   },
 ): SqliteMemoryUpdateResult {
   const db = dbManager.getDb();
+  const normalizedOldText = normalizeMemoryLookupText(oldText);
+  if (!normalizedOldText) return { matched: 0, updated: 0, entries: [] };
   const params: unknown[] = [];
   const conditions = buildScopeConditions(params, updates.target, updates.project ?? undefined);
   conditions.push(`content LIKE ? ESCAPE '\\'`);
-  params.push(`%${escapeLikePattern(oldText)}%`);
+  params.push(`%${escapeLikePattern(normalizedOldText)}%`);
 
   const rows = db.prepare(`
     SELECT ${MEMORY_SELECT_COLUMNS}
@@ -490,10 +493,12 @@ export function removeSyncedMemories(
   options: SqliteMemoryRemoveOptions,
 ): SqliteMemoryRemoveResult {
   const db = dbManager.getDb();
+  const normalizedOldText = normalizeMemoryLookupText(oldText);
+  if (!normalizedOldText) return { matched: 0, removed: 0 };
   const params: unknown[] = [];
   const conditions = buildScopeConditions(params, options.target, options.project ?? undefined);
   conditions.push(`content LIKE ? ESCAPE '\\'`);
-  params.push(`%${escapeLikePattern(oldText)}%`);
+  params.push(`%${escapeLikePattern(normalizedOldText)}%`);
 
   const matchingIds = db.prepare(`
     SELECT id

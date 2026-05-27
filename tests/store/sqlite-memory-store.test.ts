@@ -148,6 +148,41 @@ describe('sqlite-memory-store', () => {
       assert.strictEqual(all.length, 1);
       assert.strictEqual(all[0].content, 'remove 50AAmatch literal');
     });
+
+    it('normalizes pasted memory_search lines during replace matching', () => {
+      addMemory(dbManager, 'prefers pnpm over npm');
+
+      const result = replaceSyncedMemories(
+        dbManager,
+        '🧠 [global] prefers pnpm over npm\n   Created: 2026-05-27 | Last used: 2026-05-27',
+        {
+          content: 'prefers pnpm over npm and bun when needed',
+          target: 'memory',
+          project: null,
+        },
+      );
+
+      assert.strictEqual(result.matched, 1);
+      const all = getMemories(dbManager);
+      assert.ok(all.some((entry) => entry.content === 'prefers pnpm over npm and bun when needed'));
+    });
+
+    it('normalizes pasted memory_search lines during remove matching', () => {
+      addMemory(dbManager, '[correction] use pnpm — Failed: npm rewrote the lockfile', 'failure');
+
+      const result = removeSyncedMemories(
+        dbManager,
+        '⚠️ [global] [correction] [correction] use pnpm\n   Created: 2026-05-27 | Last used: 2026-05-27',
+        {
+          target: 'failure',
+          project: null,
+        },
+      );
+
+      assert.strictEqual(result.matched, 1);
+      const all = getMemories(dbManager);
+      assert.strictEqual(all.length, 0);
+    });
   });
 
   describe('searchMemories', () => {
