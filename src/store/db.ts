@@ -25,50 +25,50 @@ type BunDatabaseInstance = {
   transaction?: (fn: any) => any;
 };
 
+function createBunCompatDatabaseCtor(require: NodeRequire): DatabaseCtor {
+  const bunSqlite = require('bun:sqlite') as { Database: new (dbPath: string) => BunDatabaseInstance };
+
+  return class BunCompatDatabase implements DatabaseLike {
+    private readonly db: BunDatabaseInstance;
+
+    constructor(dbPath: string) {
+      this.db = new bunSqlite.Database(dbPath);
+    }
+
+    prepare(sql: string): StatementLike {
+      return this.db.prepare(sql);
+    }
+
+    exec(sql: string): void {
+      this.db.exec(sql);
+    }
+
+    close(): void {
+      this.db.close();
+    }
+
+    transaction(fn: any): any {
+      if (!this.db.transaction) {
+        return undefined;
+      }
+      return this.db.transaction(fn);
+    }
+  };
+}
+
 function loadDatabaseCtor(): DatabaseCtor {
   const require = createRequire(import.meta.url);
+  const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+
+  if (isBunRuntime) {
+    return createBunCompatDatabaseCtor(require);
+  }
+
   try {
     const mod = require('better-sqlite3') as { default?: DatabaseCtor } | DatabaseCtor;
     return (mod as { default?: DatabaseCtor }).default ?? (mod as DatabaseCtor);
   } catch (err) {
-    const msg = err instanceof Error ? err.message.toLowerCase() : '';
-    const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-    const isBunIncompat = msg.includes('better-sqlite3 is not yet supported in bun') || msg.includes('not yet supported in bun');
-    if (!isBunIncompat) {
-      throw err;
-    }
-    if (!isBunRuntime) {
-      throw err;
-    }
-
-    const bunSqlite = require('bun:sqlite') as { Database: new (dbPath: string) => BunDatabaseInstance };
-
-    return class BunCompatDatabase implements DatabaseLike {
-      private readonly db: BunDatabaseInstance;
-
-      constructor(dbPath: string) {
-        this.db = new bunSqlite.Database(dbPath);
-      }
-
-      prepare(sql: string): StatementLike {
-        return this.db.prepare(sql);
-      }
-
-      exec(sql: string): void {
-        this.db.exec(sql);
-      }
-
-      close(): void {
-        this.db.close();
-      }
-
-      transaction(fn: any): any {
-        if (!this.db.transaction) {
-          return undefined;
-        }
-        return this.db.transaction(fn);
-      }
-    };
+    throw err;
   }
 }
 
