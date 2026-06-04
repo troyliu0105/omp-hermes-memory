@@ -219,6 +219,20 @@ describe('sqlite-memory-store', () => {
       assert.ok(results.length > 0);
       assert.ok(results.some((r) => r.content.includes('gpu timeout issue')));
     });
+    it('should fall back to broader natural-language matching when strict term matching misses', () => {
+      addMemory(dbManager, "user's name is Naruto", 'user');
+
+      const results = searchMemories(dbManager, 'name identity Naruto', { target: 'user' });
+
+      assert.ok(results.length > 0);
+      assert.ok(results.some((r) => r.content.includes("Naruto")));
+    });
+
+    it('should not broaden explicit operator queries', () => {
+      const results = searchMemories(dbManager, 'pnpm AND nonexistent');
+
+      assert.strictEqual(results.length, 0);
+    });
 
     it('should preserve explicit quoted phrase searches', () => {
       const results = searchMemories(dbManager, '"memory search"');

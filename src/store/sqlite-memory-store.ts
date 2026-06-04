@@ -1,5 +1,5 @@
 import { DatabaseManager } from './db.js';
-import { isFts5QueryError, normalizeFts5Query } from './fts-query.js';
+import { buildFallbackFts5Query, isFts5QueryError, normalizeFts5Query } from './fts-query.js';
 import { normalizeMemoryLookupText } from './memory-lookup.js';
 import type { MemoryCategory } from '../types.js';
 
@@ -579,60 +579,77 @@ export function searchMemories(
   if (normalizedQuery.length === 0) {
     return [];
   }
-  conditions.push('m.id IN (SELECT rowid FROM memory_fts WHERE memory_fts MATCH ?)');
-  params.push(normalizedQuery);
 
-  if (project !== undefined) {
-    if (project === null) {
-      conditions.push('m.project IS NULL');
-    } else {
-      conditions.push('m.project = ?');
-      params.push(project);
+  const runSearch = (matchQuery: string): SqliteMemoryEntry[] => {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    conditions.push('m.id IN (SELECT rowid FROM memory_fts WHERE memory_fts MATCH ?)');
+    params.push(matchQuery);
+
+    if (project !== undefined) {
+      if (project === null) {
+        conditions.push('m.project IS NULL');
+      } else {
+        conditions.push('m.project = ?');
+        params.push(project);
+      }
     }
-  }
 
-  if (target) {
-    conditions.push('m.target = ?');
-    params.push(target);
-  }
-
-  if (category) {
-    conditions.push('m.category = ?');
-    params.push(category);
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  const sql = `
-    SELECT ${MEMORY_SELECT_COLUMNS}
-    FROM memories m
-    ${whereClause}
-    ORDER BY m.last_referenced DESC
-    LIMIT ?
-  `;
-  params.push(limit);
-
-  try {
-    const rows = db.prepare(sql).all(...params) as Array<{
-      id: number;
-      project: string | null;
-      target: string;
-      category: string | null;
-      content: string;
-      failure_reason: string | null;
-      tool_state: string | null;
-      corrected_to: string | null;
-      created: string;
-      last_referenced: string;
-    }>;
-
-    return rows.map(mapRow);
-  } catch (err) {
-    if (isFts5QueryError(err)) {
-      return [];
+    if (target) {
+      conditions.push('m.target = ?');
+      params.push(target);
     }
-    throw err;
+
+    if (category) {
+      conditions.push('m.category = ?');
+      params.push(category);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT ${MEMORY_SELECT_COLUMNS}
+      FROM memories m
+      ${whereClause}
+      ORDER BY m.last_referenced DESC
+      LIMIT ?
+    `;
+
+    try {
+      const rows = db.prepare(sql).all(...params, limit) as Array<{
+        id: number;
+        project: string | null;
+        target: string;
+        category: string | null;
+        content: string;
+        failure_reason: string | null;
+        tool_state: string | null;
+        corrected_to: string | null;
+        created: string;
+        last_referenced: string;
+      }>;
+
+      return rows.map(mapRow);
+    } catch (err) {
+      if (isFts5QueryError(err)) {
+        return [];
+      }
+      throw err;
+    }
+  };
+
+  const exactResults = runSearch(normalizedQuery);
+  if (exactResults.length > 0) {
+    return exactResults;
   }
+
+  const fallbackQuery = buildFallbackFts5Query(query);
+  if (!fallbackQuery || fallbackQuery === normalizedQuery) {
+    return exactResults;
+  }
+
+  return runSearch(fallbackQuery);
 }
 
 /**

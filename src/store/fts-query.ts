@@ -2,6 +2,23 @@ const FTS5_OPERATOR_PATTERN = /\b(OR|AND|NOT|NEAR)\b/;
 const FTS5_TOKEN_PATTERN = /"([^"]*)"|(\S+)/g;
 const NATURAL_LANGUAGE_CONNECTORS = new Set(['and', 'or', 'not', 'near']);
 
+function collectNaturalLanguageTerms(query: string): string[] {
+  const terms: string[] = [];
+
+  for (const match of query.matchAll(FTS5_TOKEN_PATTERN)) {
+    const phrase = match[1];
+    const term = match[2];
+    if (phrase === undefined && term && NATURAL_LANGUAGE_CONNECTORS.has(term.toLowerCase())) {
+      continue;
+    }
+
+    const rawValue = phrase ?? term ?? '';
+    if (rawValue.length > 0) terms.push(rawValue);
+  }
+
+  return terms;
+}
+
 /**
  * Normalize natural-language search input into an FTS5 query.
  * Plain terms become individually quoted for implicit AND matching.
@@ -16,19 +33,30 @@ export function normalizeFts5Query(query: string): string {
     return trimmed;
   }
 
-  const normalizedTerms: string[] = [];
-  for (const match of trimmed.matchAll(FTS5_TOKEN_PATTERN)) {
-    const phrase = match[1];
-    const term = match[2];
-    if (phrase === undefined && term && NATURAL_LANGUAGE_CONNECTORS.has(term.toLowerCase())) {
-      continue;
-    }
+  return collectNaturalLanguageTerms(trimmed)
+    .map((term) => `"${term.replace(/"/g, '""')}"`)
+    .join(' ');
+}
 
-    const rawValue = phrase ?? term ?? '';
-    normalizedTerms.push(`"${rawValue.replace(/"/g, '""')}"`);
+/**
+ * Build a broader fallback query for natural-language searches.
+ * Returns null for explicit operator queries or when the input is already a
+ * single searchable term.
+ */
+export function buildFallbackFts5Query(query: string): string | null {
+  const trimmed = query.trim();
+  if (trimmed.length === 0 || FTS5_OPERATOR_PATTERN.test(trimmed)) {
+    return null;
   }
 
-  return normalizedTerms.join(' ');
+  const terms = collectNaturalLanguageTerms(trimmed);
+  if (terms.length <= 1) {
+    return null;
+  }
+
+  return terms
+    .map((term) => `"${term.replace(/"/g, '""')}"`)
+    .join(' OR ');
 }
 
 export function isFts5QueryError(err: unknown): boolean {
