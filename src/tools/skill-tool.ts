@@ -3,9 +3,8 @@
  * Complements the `memory` tool (declarative knowledge) with procedural knowledge.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { Type } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { SkillStore } from "../store/skill-store.js";
 import { SKILL_TOOL_DESCRIPTION } from "../constants.js";
 
@@ -52,7 +51,14 @@ const SKILL_ID_PARAM = Type.String({
 });
 
 const SKILL_TOOL_PARAMETERS = Type.Object({
-  action: StringEnum(["create", "view", "patch", "update", "edit", "delete"] as const, {
+  action: Type.Union([
+    Type.Literal("create"),
+    Type.Literal("view"),
+    Type.Literal("patch"),
+    Type.Literal("update"),
+    Type.Literal("edit"),
+    Type.Literal("delete"),
+  ], {
     description: "The skill action to perform.",
   }),
   name: Type.Optional(Type.String({
@@ -62,7 +68,7 @@ const SKILL_TOOL_PARAMETERS = Type.Object({
   description: Type.Optional(Type.String({
     description: "One-line description of when to use this skill. Required for create; optional for update/edit.",
   })),
-  scope: Type.Optional(StringEnum(["global", "project"] as const, {
+  scope: Type.Optional(Type.Union([Type.Literal("global"), Type.Literal("project")], {
     description: "Required for create. Use 'global' for portable procedures and 'project' for repo-specific workflows.",
   })),
   section: Type.Optional(Type.String({
@@ -90,15 +96,6 @@ export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
     name: "skill",
     label: "Skill",
     description: SKILL_TOOL_DESCRIPTION,
-    promptSnippet: "Save or manage reusable procedures and patterns",
-    promptGuidelines: [
-      "Use the skill tool after completing complex tasks that required trial and error or multiple tool calls.",
-      "Use 'create' to save a new reusable procedure, 'patch' to update a section of an existing skill by skill_id, and 'update' for a full rewrite.",
-      "Scope is required on create: choose scope='global' for transferable procedures and scope='project' when the workflow depends on this repo's paths, scripts, conventions, or deploy steps.",
-      "Prefer structured fields for create/update: when_to_use, procedure_steps, pitfalls, and verification_steps. The tool will render valid SKILL.md sections for you.",
-      "Use 'view' before patching or updating when you need to inspect an existing skill.",
-      "Do NOT use skills for temporary task state — only for durable, reusable procedures.",
-    ],
     parameters: SKILL_TOOL_PARAMETERS,
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       const skillParams = params as {

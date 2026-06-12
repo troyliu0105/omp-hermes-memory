@@ -1,13 +1,11 @@
-import * as path from 'node:path';
-import * as os from 'node:os';
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { Type } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { DatabaseManager } from '../store/db.js';
 import { searchSessions, getIndexedMessageCount } from '../store/session-search.js';
 import { searchSessionAnchors } from '../store/session-anchor-search.js';
 import type { SessionAnchorRange, SessionAnchorSearchResult } from '../store/session-anchor-search.js';
 import type { SessionSearchConfig } from '../types.js';
+import { resolvePreferredSessionDir } from '../paths.js';
 
 interface SearchResult {
   success: boolean;
@@ -21,7 +19,7 @@ interface SessionSearchToolOptions {
   sessionsDir?: string;
 }
 
-const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.pi', 'agent', 'sessions');
+const DEFAULT_SESSIONS_DIR = resolvePreferredSessionDir();
 
 export function registerSessionSearchTool(
   pi: ExtensionAPI,
@@ -41,9 +39,9 @@ function registerAnchorSessionSearchTool(pi: ExtensionAPI, sessionsDir: string):
   pi.registerTool({
     name: 'session_search',
     label: 'Session Search',
-    description: `Search Pi session JSONL files in the opt-in anchor mode using a Markdown request.
+    description: `Search OMP session JSONL files in the opt-in anchor mode using a Markdown request.
 
-This mode accepts only a markdown request. Supported scalar fields are from, to, cwd, and limit. Supported list sections are all, any, and exclude: all terms must match, any requires at least one listed term, and exclude removes matching ranges. It returns compact JSONL line-range anchors, not summaries or previews. Output is plain text: count, optional message, then anchors as path:startLine-endLine with a short reason.
+This defaults to the active OMP session root. This mode accepts only a markdown request. Supported scalar fields are from, to, cwd, and limit. Supported list sections are all, any, and exclude: all terms must match, any requires at least one listed term, and exclude removes matching ranges. It returns compact JSONL line-range anchors, not summaries or previews. Output is plain text: count, optional message, then anchors as path:startLine-endLine with a short reason.
 
 Example:
 from: 2026-05-14
@@ -60,12 +58,6 @@ any:
 
 exclude:
 - delta`,
-    promptSnippet: 'Search past session JSONL files for compact source anchors',
-    promptGuidelines: [
-      'Use session_search with markdown only when the session search anchor mode is configured.',
-      'Request source anchors, not summaries or previews.',
-      'Use all for required terms, any for alternatives, and exclude for terms that must not appear in a returned range.',
-    ],
     parameters: Type.Object({
       markdown: Type.String({ description: 'Markdown request with optional from/to/cwd/limit fields and all/any/exclude lists.' }),
     }),
@@ -120,7 +112,7 @@ function registerLegacySessionSearchTool(pi: ExtensionAPI, dbManager: DatabaseMa
   pi.registerTool({
     name: 'session_search',
     label: 'Session Search',
-    description: `Search across past Pi coding sessions for relevant conversation context. Use this when the user asks about previous discussions, past work, or when you need context from earlier sessions.
+    description: `Search across past OMP coding sessions for relevant conversation context. Use this when the user asks about previous discussions, past work, or when you need context from earlier sessions.
 
 Examples:
 - "What did we discuss about auth last week?"
@@ -128,15 +120,10 @@ Examples:
 - "What approach did we take for the database migration?"
 
 Returns conversation snippets with session dates and project context.`,
-    promptSnippet: 'Search past conversations for relevant context',
-    promptGuidelines: [
-      'Use session_search when the user asks about previous discussions or past work.',
-      'Use session_search when you need context from earlier sessions.',
-    ],
     parameters: Type.Object({
       query: Type.String({ description: 'Search query. Use natural language or specific terms.' }),
       project: Type.Optional(Type.String({ description: 'Filter by project name (optional).' })),
-      role: Type.Optional(StringEnum(['user', 'assistant'] as const, { description: 'Filter by message role (optional).' })),
+      role: Type.Optional(Type.Union([Type.Literal('user'), Type.Literal('assistant')], { description: 'Filter by message role (optional).' })),
       limit: Type.Optional(Type.Number({ description: 'Maximum results to return (default: 10, max: 20).' })),
     }),
     execute: async (_id: string, args: { query: string; project?: string; role?: string; limit?: number }) => {

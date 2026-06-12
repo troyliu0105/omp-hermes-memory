@@ -98,7 +98,7 @@ function extractToolCalls(content: unknown): string[] | undefined {
 }
 
 /**
- * Parse a Pi session JSONL file.
+ * Parse an OMP session JSONL file.
  *
  * @param filePath — Path to the .jsonl file
  * @returns Parsed session data, or null if the file is invalid
@@ -173,7 +173,7 @@ export function parseSessionFile(filePath: string): ParsedSession | null {
 /**
  * Get all session JSONL files for a project (or all projects).
  *
- * @param sessionsDir — Path to ~/.pi/agent/sessions/
+ * @param sessionsDir — Path to ~/.omp/agent/sessions/
  * @param projectDir — Optional: specific project directory name (e.g., "--Users-...--")
  * @returns Array of file paths
  */

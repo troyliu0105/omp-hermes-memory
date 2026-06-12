@@ -2,7 +2,7 @@
  * SQLite schema for pi-hermes-memory v0.4
  *
  * Tables:
- * - sessions — Pi session metadata
+ * - sessions — OMP session metadata
  * - messages — all conversation messages
  * - message_fts — FTS5 index for full-text search across messages
  * - memories — extended memory entries (unlimited, searchable)

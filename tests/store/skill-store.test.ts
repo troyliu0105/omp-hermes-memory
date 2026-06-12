@@ -1,5 +1,5 @@
 /**
- * Unit tests for SkillStore — scoped CRUD, migration, and Pi-native file layout.
+ * Unit tests for SkillStore — scoped CRUD, migration, and OMP-native file layout.
  */
 
 import * as fs from "node:fs/promises";

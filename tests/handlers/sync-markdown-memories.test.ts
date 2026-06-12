@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent/extensibility/extensions/types';
 import { DatabaseManager } from '../../src/store/db.js';
 import { registerMemoryTool } from '../../src/tools/memory-tool.js';
 import {
@@ -129,7 +129,7 @@ describe('memory sqlite sync + markdown backfill', () => {
     );
   });
 
-  it('backfills legacy project memory directories from the old ~/.pi/agent/<project> layout', async () => {
+  it('backfills legacy project memory directories from the old ~/.omp/agent/<project> layout', async () => {
     const legacyProjectDir = path.join(agentRoot, 'legacy-project');
     fs.mkdirSync(legacyProjectDir, { recursive: true });
     fs.writeFileSync(
@@ -181,7 +181,7 @@ describe('memory sqlite sync + markdown backfill', () => {
     assert.strictEqual(results[0].content, 'latest path searchable entry');
   });
 
-  it('still scans project markdown under ~/.pi/agent when memoryDir is customized elsewhere', () => {
+  it('still scans project markdown under ~/.omp/agent when memoryDir is customized elsewhere', () => {
     const customGlobalDir = path.join(tmpDir, 'external-memory-root');
     fs.mkdirSync(customGlobalDir, { recursive: true });
 

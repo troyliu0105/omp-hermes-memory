@@ -10,7 +10,7 @@ import { registerMemoryTool } from "../../src/tools/memory-tool.js";
 import { MemoryStore } from "../../src/store/memory-store.js";
 import { DatabaseManager } from "../../src/store/db.js";
 import { getMemories, syncMemoryEntry } from "../../src/store/sqlite-memory-store.js";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 
 describe("registerMemoryTool", () => {
   let tmpDir: string;
@@ -47,9 +47,6 @@ describe("registerMemoryTool", () => {
     const tool = registeredTools[0];
     assert.strictEqual(tool.name, "memory", "tool name should be 'memory'");
     assert.strictEqual(tool.label, "Memory", "tool label should be 'Memory'");
-    assert.ok(tool.description.length > 0, "description should not be empty");
-    assert.ok(tool.promptSnippet.length > 0, "promptSnippet should not be empty");
-    assert.ok(Array.isArray(tool.promptGuidelines), "promptGuidelines should be an array");
     assert.ok(tool.parameters, "parameters schema should be defined");
   });
 

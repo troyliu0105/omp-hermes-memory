@@ -2,15 +2,15 @@
 
 ![Pi Hermes Memory](docs/images/pi_memory.png)
 
-# 🧠 Pi Hermes Memory
+# 🧠 OMP Hermes Memory
 
-**Persistent memory + session search + secret scanning for Pi**
+**Persistent memory + session search + secret scanning for Oh My Pi**
 
 ---
 
 </div>
 
-Your Pi agent normally forgets everything when you close a session. **This extension fixes that.**
+Your Oh My Pi agent normally forgets everything when you close a session. **This plugin fixes that.**
 
 - 🔍 **Search every conversation** — "what did we discuss about auth?" finds it instantly
 - 🧠 **Persistent memory** — facts, preferences, corrections survive across sessions
@@ -24,8 +24,8 @@ Your Pi agent normally forgets everything when you close a session. **This exten
 ## Quick Start
 
 ```bash
-# Install
-pi install npm:pi-hermes-memory
+# Install in Oh My Pi
+omp plugin add npm:omp-hermes-memory
 
 # Index your past sessions (one-time)
 /memory-index-sessions
@@ -37,18 +37,29 @@ pi install npm:pi-hermes-memory
 /learn-memory-tool
 ```
 
+## OMP Storage Layout Compatibility
+
+This OMP port preserves the `pi-hermes-memory` file formats and directory layout shape, but stores them under OMP roots.
+
+- Config path: `~/.omp/agent/hermes-memory-config.json`
+- Global memory root: `~/.omp/agent/pi-hermes-memory/`
+- Project memory root: `~/.omp/agent/projects-memory/<project>/`
+- Session indexing root: `~/.omp/agent/sessions/`
+
+If you already know the `pi-hermes-memory` config schema and markdown/SQLite file layout, the same structure now lives under `~/.omp/agent/`.
+
 ## Upgrade Notes (v0.7.10)
 
-If you’re upgrading from older versions, startup now auto-migrates extension data safely:
+If you’re upgrading from older versions, startup now auto-migrates extension data safely inside OMP storage:
 
-- legacy extension root: `~/.pi/agent/memory` → `~/.pi/agent/pi-hermes-memory`
-- legacy flat skills: `~/.pi/agent/pi-hermes-memory/skills/*.md` → `~/.pi/agent/pi-hermes-memory/skills/<slug>/SKILL.md`
+- legacy extension root: `~/.omp/agent/memory` → `~/.omp/agent/pi-hermes-memory`
+- legacy flat skills: `~/.omp/agent/pi-hermes-memory/skills/*.md` → `~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md`
 
-This resolves Pi skill index conflicts like:
+This resolves skill index conflicts like:
 
 - `name "..." does not match parent directory "skills"`
 
-No manual action is needed. Launch Pi once after upgrade to let migration/normalization run.
+No manual action is needed. Launch OMP once after upgrade to let migration/normalization run.
 
 ## Features
 
@@ -82,7 +93,7 @@ The extension manages three types of knowledge:
 |---|---|---|---|
 | **Memory** (MEMORY.md) | Facts — env details, project conventions, tool quirks | 5,000 chars max | Searchable by default |
 | **User Profile** (USER.md) | Who you are — name, preferences, communication style | 5,000 chars max | Searchable by default |
-| **Skills** (Pi-native `SKILL.md`) | Procedures — *how* to do something, reusable across sessions | Unlimited | Discoverable by Pi + manageable via the skill tool |
+| **Skills** (OMP-native `SKILL.md`) | Procedures — *how* to do something, reusable across sessions | Unlimited | Discoverable by OMP + manageable via the skill tool |
 
 ![Memory + Skills Architecture](docs/images/memory-architecture.svg)
 
@@ -95,19 +106,19 @@ Every write — memory and skills — passes through a scanner before being acce
 ## Installation
 
 ```bash
-pi install npm:pi-hermes-memory
+omp plugin add npm:omp-hermes-memory
 ```
 
-Or install from GitHub:
+Or link a local checkout during development:
 
 ```bash
-pi install git:github:chandra447/pi-hermes-memory
+omp plugin link /path/to/pi-hermes-memory
 ```
 
-Or test locally without installing:
+Or test a single extension file directly:
 
 ```bash
-pi -e /path/to/pi-hermes-memory/src/index.ts
+omp -e /path/to/pi-hermes-memory/src/index.ts -p "/memory-preview-context"
 ```
 
 ## Two-Tier Memory Architecture
@@ -116,8 +127,8 @@ The extension stores memory at two levels:
 
 | Tier | Location | What goes here | Available when |
 |---|---|---|---|
-| **Global** | `~/.pi/agent/pi-hermes-memory/` | Facts that apply everywhere — your name, preferences, OS, tools | Searchable via `memory_search` |
-| **Project** | `~/.pi/agent/projects-memory/<project>/` | Facts scoped to one codebase — architecture decisions, API quirks, team norms | Searchable when cwd matches the project |
+| **Global** | `~/.omp/agent/pi-hermes-memory/` | Facts that apply everywhere — your name, preferences, OS, tools | Searchable via `memory_search` |
+| **Project** | `~/.omp/agent/projects-memory/<project>/` | Facts scoped to one codebase — architecture decisions, API quirks, team norms | Searchable when cwd matches the project |
 
 By default, full Markdown memories are **not** injected into the system prompt. The system prompt gets a full-detail `<memory-policy>` that tells the agent when to call `memory_search` and how to treat memory results. This keeps first-turn token usage low while preserving access to user, project, failure, correction, insight, preference, convention, and tool-quirk memories.
 
@@ -196,10 +207,10 @@ The agent also gets a `skill` tool for saving reusable procedures:
 | `update` | Replace the description and/or full body of a skill by `skill_id` |
 | `delete` | Remove a skill by `skill_id` |
 
-Skills are stored in Pi-native locations:
+Skills are stored in OMP-native locations:
 
-- Global skills: `~/.pi/agent/pi-hermes-memory/skills/<slug>/SKILL.md`
-- Project skills: `~/.pi/agent/projects-memory/<project>/skills/<slug>/SKILL.md`
+- Global skills: `~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md`
+- Project skills: `~/.omp/agent/projects-memory/<project>/skills/<slug>/SKILL.md`
 
 New skills must choose scope explicitly:
 
@@ -255,9 +266,9 @@ Project-scoped skills are loaded via Pi's `resources_discover` hook.
 
 On discovery, the extension returns the active project's skills directory as a skill path:
 
-- `~/.pi/agent/projects-memory/<project>/skills/`
+- `~/.omp/agent/projects-memory/<project>/skills/`
 
-This lets Pi discover project skills as native skills without copying them into the global skills folder.
+This lets OMP discover project skills as native skills without copying them into the global skills folder.
 
 ### Memory vs User Profile vs Skills
 
@@ -265,13 +276,13 @@ This lets Pi discover project skills as native skills without copying them into 
 |---|---|---|---|
 | **memory** | `MEMORY.md` | Agent's notes — env facts, project conventions, tool quirks, lessons learned | 5,000 chars |
 | **user** | `USER.md` | User profile — name, preferences, communication style, habits | 5,000 chars |
-| **skills** | `~/.pi/agent/pi-hermes-memory/skills/<slug>/SKILL.md` or `projects-memory/<project>/skills/<slug>/SKILL.md` | Procedures — *how* to debug, deploy, test, or fix something | Unlimited |
+| **skills** | `~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md` or `projects-memory/<project>/skills/<slug>/SKILL.md` | Procedures — *how* to debug, deploy, test, or fix something | Unlimited |
 | **extended** | `sessions.db` | Searchable memories beyond the core limit | Unlimited |
 | **sessions** | `sessions.db` | Past conversation history (searchable via FTS5) | Unlimited |
 
 ### Session History Search
 
-By default, the extension indexes your Pi session history into a SQLite database with FTS5 full-text search. The agent can search across all past conversations using the `session_search` tool:
+By default, the extension indexes your OMP session history into a SQLite database with FTS5 full-text search. The agent can search across all past conversations using the `session_search` tool:
 
 | Tool | What it does |
 |---|---|---|
@@ -356,7 +367,7 @@ This means skills build up naturally over time without you having to ask.
 | `/memory-consolidate` | Manually trigger memory consolidation to free space |
 | `/memory-interview` | Answer a few questions to pre-fill your user profile |
 | `/memory-switch-project` | List all project memories and their entry counts |
-| `/memory-index-sessions` | Import past Pi sessions into the search database |
+| `/memory-index-sessions` | Import past OMP sessions into the search database |
 | `/memory-sync-markdown` | Backfill Markdown memories into the SQLite search store |
 | `/memory-preview-context` | Preview the memory policy or legacy memory blocks appended to the system prompt |
 | `/learn-memory-tool` | Skill that teaches users how to use the memory system |
@@ -412,7 +423,7 @@ Move behavior:
 
 ## Configuration
 
-Create `~/.pi/agent/hermes-memory-config.json`:
+Create `~/.omp/agent/hermes-memory-config.json`:
 
 ```json
 {
@@ -421,7 +432,7 @@ Create `~/.pi/agent/hermes-memory-config.json`:
   "memoryCharLimit": 5000,
   "userCharLimit": 5000,
   "projectCharLimit": 5000,
-  "memoryDir": "~/.pi/agent/pi-hermes-memory",
+  "memoryDir": "~/.omp/agent/pi-hermes-memory",
   "projectsMemoryDir": "projects-memory",
   "sessionSearch": { "variant": "legacy" },
   "llmModelOverride": "openrouter/deepseek/deepseek-v4-flash",
@@ -452,10 +463,10 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 | `memoryCharLimit` | `5000` | Max characters in MEMORY.md |
 | `userCharLimit` | `5000` | Max characters in USER.md |
 | `projectCharLimit` | `5000` | Max characters in project-scoped MEMORY.md |
-| `memoryDir` | `~/.pi/agent/pi-hermes-memory` | Custom directory for extension storage files |
-| `projectsMemoryDir` | `projects-memory` | Subdirectory under `~/.pi/agent/` for project-scoped memory |
-| `sessionSearch` | `{ "variant": "legacy" }` | Session search implementation: `legacy` keeps the existing SQLite/FTS snippet search; `anchors` uses the opt-in Markdown request surface and returns compact JSONL line-range anchors from `~/.pi/agent/sessions/` |
-| `llmModelOverride` | unset | Optional model override for child `pi -p` subprocess calls used by background review, correction save, session flush, and consolidation |
+| `memoryDir` | `~/.omp/agent/pi-hermes-memory` | Custom directory for extension storage files |
+| `projectsMemoryDir` | `projects-memory` | Subdirectory under `~/.omp/agent/` for project-scoped memory |
+| `sessionSearch` | `{ "variant": "legacy" }` | Session search implementation: `legacy` keeps the existing SQLite/FTS snippet search; `anchors` uses the opt-in Markdown request surface and returns compact JSONL line-range anchors from `~/.omp/agent/sessions/` |
+| `llmModelOverride` | unset | Optional model override for child `omp -p` subprocess calls used by background review, correction save, session flush, and consolidation |
 | `llmThinkingOverride` | unset | Optional thinking override for those child subprocess calls; valid values are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. If `llmModelOverride` is set and this is omitted, child calls default to `off` |
 | `nudgeInterval` | `10` | Turns between auto-reviews |
 | `nudgeToolCalls` | `15` | Tool calls between auto-reviews (OR with turns) |
@@ -480,7 +491,7 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 ## Where Data Lives
 
 ```
-~/.pi/agent/
+~/.omp/agent/
 ├── pi-hermes-memory/      ← Global extension storage root
 │   ├── MEMORY.md          ← Agent's personal notes (env facts, patterns, lessons)
 │   ├── USER.md            ← User profile (name, preferences, habits)
@@ -503,23 +514,23 @@ Create `~/.pi/agent/hermes-memory-config.json`:
 └── ...
 ```
 
-These are plain markdown files. You can read and edit them directly if you want to curate what the agent remembers. Memory entries are separated by `§` (section sign). Skills use Pi-compatible `SKILL.md` files with frontmatter.
+These are plain markdown files. You can read and edit them directly if you want to curate what the agent remembers. Memory entries are separated by `§` (section sign). Skills use `SKILL.md` files with the same frontmatter layout as `pi-hermes-memory`.
 
-If you are upgrading from a version that stored project memory directly at `~/.pi/agent/<project>/MEMORY.md`, the extension copies or merges those entries into `~/.pi/agent/projects-memory/<project>/MEMORY.md` on startup. The old folders are left in place as a backup.
+If you are upgrading from a version that stored project memory directly at `~/.omp/agent/<project>/MEMORY.md`, the extension copies or merges those entries into `~/.omp/agent/projects-memory/<project>/MEMORY.md` on startup. The old folders are left in place as a backup.
 
 The `sessions.db` SQLite database stores session history and extended memory entries. It's searchable via FTS5 full-text search.
 
 ## Known Limitations
 
 - **`§` delimiter**: Memory entries are separated by `§` (section sign). If an entry naturally contains `§`, it will be split incorrectly on reload. This is rare in English text but possible. [Hermes uses the same delimiter.]
-- **Background review cost**: Each review cycle costs one full LLM API call via a child `pi -p` process. Correction detection and explicit skill saves can add additional calls when the agent decides they are worth it.
+- **Background review cost**: Each review cycle costs one full LLM API call via a child `omp -p` process. Correction detection and explicit skill saves can add additional calls when the agent decides they are worth it.
 - **Session search requires indexing**: Past sessions must be indexed before they're searchable. Run `/memory-index-sessions` to bulk-import, or let the extension auto-index on session shutdown.
 - **Older Markdown memories may need backfill**: If you saved memories before the SQLite mirror existed or search looks stale, run `/memory-sync-markdown`.
 - **Core memory limits still apply**: SQLite search mirroring does not bypass the 5,000-char core Markdown limit. If consolidation cannot free space, the write fails instead of becoming SQLite-only memory invisibly.
-- **System prompts are invisible**: Pi's TUI does not display the system prompt. Use `/memory-preview-context` to inspect whether policy-only or legacy memory injection is active.
-- **Project skill visibility depends on Pi discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a moved or newly created project skill doesn't show up immediately in a running session, trigger a reload/new session so Pi refreshes discovered resources.
-- **Project move requires active project context**: in `/memory-skills`, the `p` hotkey is disabled when Pi is not currently in a detected project directory.
-- **Skills still need curation**: Skills are saved by the agent through the `skill` tool when it decides a reusable procedure is worth keeping. They may still need review. You can move, delete, or edit them directly in `~/.pi/agent/pi-hermes-memory/skills/` or the active project's `skills/` folder.
+- **System prompts are invisible**: OMP's TUI does not display the system prompt. Use `/memory-preview-context` to inspect whether policy-only or legacy memory injection is active.
+- **Project skill visibility depends on OMP discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a moved or newly created project skill doesn't show up immediately in a running session, trigger a reload/new session so OMP refreshes discovered resources.
+- **Project move requires active project context**: in `/memory-skills`, the `p` hotkey is disabled when OMP is not currently in a detected project directory.
+- **Skills still need curation**: Skills are saved by the agent through the `skill` tool when it decides a reusable procedure is worth keeping. They may still need review. You can move, delete, or edit them directly in `~/.omp/agent/pi-hermes-memory/skills/` or the active project's `skills/` folder.
 
 ## Architecture
 

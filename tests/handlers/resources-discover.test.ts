@@ -27,7 +27,7 @@ describe("resources_discover skill path resolution", () => {
 
     const result = await handlers.resources_discover({ cwd: "/tmp/demo-repo" }, {});
     const expectedGlobal = "/tmp/global-skills";
-    const expectedPath = path.join(os.homedir(), ".pi", "agent", "projects-memory", "demo-repo", "skills");
+    const expectedPath = path.join(os.homedir(), ".omp", "agent", "projects-memory", "demo-repo", "skills");
 
     assert.deepStrictEqual(result, { skillPaths: [expectedGlobal, expectedPath] });
   });
@@ -43,7 +43,7 @@ describe("resources_discover skill path resolution", () => {
 
     const cwd = "/tmp/demo-repo";
     const resource = resolveProjectSkillDiscovery(store, "projects-memory", cwd);
-    const expectedPath = path.join(os.homedir(), ".pi", "agent", "projects-memory", "demo-repo", "skills");
+    const expectedPath = path.join(os.homedir(), ".omp", "agent", "projects-memory", "demo-repo", "skills");
 
     assert.deepStrictEqual(resource, { skillPaths: ["/tmp/global-skills", expectedPath] });
     assert.strictEqual(store.getProjectName(), "demo-repo");

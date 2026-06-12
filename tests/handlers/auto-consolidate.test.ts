@@ -44,13 +44,13 @@ describe("triggerConsolidation", () => {
     execCalls = [];
   });
 
-  it("builds prompt with current entries and calls pi.exec", async () => {
+  it("builds prompt with current entries and calls omp.exec", async () => {
     const pi = createMockPi();
     await triggerConsolidation(pi, mockStore, "memory");
 
-    assert.strictEqual(execCalls.length, 1, "should call pi.exec once");
+    assert.strictEqual(execCalls.length, 1, "should call omp.exec once");
     const [cmd, args] = execCalls[0];
-    assert.strictEqual(cmd, "pi");
+    assert.strictEqual(cmd, "omp");
     assert.ok(args[0] === "-p", "should use -p flag");
     assert.ok(args.includes("--no-session"), "should include --no-session");
 

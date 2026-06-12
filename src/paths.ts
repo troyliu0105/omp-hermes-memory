@@ -2,7 +2,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { DEFAULT_PROJECTS_MEMORY_DIR } from "./constants.js";
 
-export const AGENT_ROOT = path.join(os.homedir(), ".pi", "agent");
+export const AGENT_ROOT = path.join(os.homedir(), ".omp", "agent");
+export const OMP_CONFIG_PATH = path.join(AGENT_ROOT, "hermes-memory-config.json");
+export const OMP_SESSIONS_DIR = path.join(AGENT_ROOT, "sessions");
 
 export function expandHome(input: string): string {
   if (input === "~") return os.homedir();
@@ -54,4 +56,12 @@ export function normalizeProjectsMemoryDir(input: string): string | undefined {
 export function resolveProjectsRoot(projectsMemoryDir = DEFAULT_PROJECTS_MEMORY_DIR): string {
   const normalized = normalizeProjectsMemoryDir(projectsMemoryDir) ?? DEFAULT_PROJECTS_MEMORY_DIR;
   return path.join(AGENT_ROOT, normalized);
+}
+
+export function resolvePreferredSessionDir(): string {
+  return OMP_SESSIONS_DIR;
+}
+
+export function resolveAllSessionDirs(): string[] {
+  return [OMP_SESSIONS_DIR];
 }

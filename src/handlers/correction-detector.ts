@@ -8,7 +8,7 @@
  * - Negative patterns: suppress even if a positive pattern matched
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { MemoryStore } from "../store/memory-store.js";
 import { DatabaseManager } from "../store/db.js";
 import {
@@ -207,7 +207,7 @@ export function setupCorrectionDetector(
       );
 
       const result = await execChildPrompt(pi, prompt.join("\n"), config, {
-        signal: ctx.signal,
+        signal: undefined,
         timeoutMs: 30000,
       });
 

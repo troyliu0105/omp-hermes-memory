@@ -24,7 +24,7 @@ export interface ProjectSkillInfo extends ProjectInfo {
  *
  * A "project" is any directory that is not the user's home directory.
  * The project name is the directory's basename.
- * Project-scoped memory is stored at ~/.pi/agent/<projectsMemoryDir>/<projectName>/.
+ * Project-scoped memory is stored at ~/.omp/agent/<projectsMemoryDir>/<projectName>/.
  */
 export function detectProject(projectsMemoryDir = "projects-memory", cwd?: string): ProjectInfo {
   const dir = cwd ?? process.cwd();

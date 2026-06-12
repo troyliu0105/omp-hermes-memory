@@ -2,14 +2,14 @@
  * Learn memory tool command — /learn-memory-tool teaches users about the memory system.
  */
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 
 export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
   pi.registerCommand("learn-memory-tool", {
-    description: "Learn how to use the pi-hermes-memory extension effectively",
-    handler: async (_args, ctx: ExtensionCommandContext) => {
+    description: "Learn how to use the omp-hermes-memory extension effectively",
+    handler: async (_args, ctx) => {
       // Show main menu first
-      const section = await ctx.ui.select("Pi Hermes Memory Guide", [
+      const section = await ctx.ui.select("OMP Hermes Memory Guide", [
         "📦 What Gets Saved",
         "🔧 Tools Available",
         "📋 Commands",
@@ -34,7 +34,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("  🧠 Memory       │ MEMORY.md     │ 5,000 chars");
         lines.push("  👤 User Profile │ USER.md       │ 5,000 chars");
         lines.push("  ⚠️  Failures     │ failures.md   │ 10,000 chars");
-        lines.push("  📚 Skills       │ Pi-native skill dirs │ Unlimited");
+        lines.push("  📚 Skills       │ OMP-native skill dirs │ Unlimited");
         lines.push("  💾 Extended     │ sessions.db   │ Unlimited");
         lines.push("");
         lines.push("  Memory:   Facts — env details, project conventions, tool quirks");
@@ -175,7 +175,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("    → Check /memory-insights, tell agent \"remember X\"");
         lines.push("");
         lines.push("  \"Want to edit manually\"");
-        lines.push("    → Files at ~/.pi/agent/memory/ (plain markdown)");
+        lines.push("    → Files at ~/.omp/agent/pi-hermes-memory/ (plain markdown)");
       }
 
       if (lines.length > 0) {

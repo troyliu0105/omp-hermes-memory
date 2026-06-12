@@ -2,7 +2,7 @@
  * Shared TypeScript types for the Hermes Memory extension.
  */
 
-import type { TextContent } from "@earendil-works/pi-ai";
+import type { TextContent } from "@oh-my-pi/pi-ai/types";
 
 export type MemoryOverflowStrategy = "auto-consolidate" | "reject" | "fifo-evict";
 
@@ -42,9 +42,9 @@ export interface MemoryConfig {
   flushMinTurns: number;
   /** Recent conversation messages included in session flush. 0 = all. Default: 0 */
   flushRecentMessages?: number;
-  /** Override extension storage directory. Default: ~/.pi/agent/pi-hermes-memory */
+  /** Override extension storage directory. Default: ~/.omp/agent/pi-hermes-memory */
   memoryDir?: string;
-  /** Directory for project-scoped memory (relative to ~/.pi/agent). Default: "projects-memory" */
+  /** Directory for project-scoped memory (relative to ~/.omp/agent). Default: "projects-memory" */
   projectsMemoryDir?: string;
   /** Session search configuration. Default: { variant: "legacy" } */
   sessionSearch?: SessionSearchConfig;
@@ -159,7 +159,7 @@ export interface SkillResult {
 }
 
 /**
- * Extract displayable text from a Pi session entry message.
+ * Extract displayable text from an OMP session entry message.
  *
  * Accepts any value — returns null for non-message entries (BashExecutionMessage,
  * NotificationMessage, etc.) that lack a `content` property.

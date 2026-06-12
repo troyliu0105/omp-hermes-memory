@@ -81,7 +81,7 @@ export function indexSession(dbManager: DatabaseManager, session: ParsedSession)
  * Index all sessions from disk.
  *
  * @param dbManager — Database manager instance
- * @param sessionsDir — Path to ~/.pi/agent/sessions/
+ * @param sessionsDir — Path to ~/.omp/agent/sessions/
  * @param projectDir — Optional: specific project directory to index
  * @returns Bulk index result
  */

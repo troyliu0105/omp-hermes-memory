@@ -1,6 +1,5 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { Type } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { DatabaseManager } from '../store/db.js';
 import { searchMemories, getMemoryStats } from '../store/sqlite-memory-store.js';
 import type { MemoryCategory } from '../types.js';
@@ -25,17 +24,11 @@ Use cases:
 - Search for past failures: "memory_search('auth', category='failure')"
 
 Returns matching memory entries with project context and dates.`,
-    promptSnippet: 'Search extended memory store (unlimited capacity)',
-    promptGuidelines: [
-      'Use memory_search when you need context beyond what is in the system prompt.',
-      'Use memory_search to find project-specific memories or user preferences.',
-      'Use memory_search with category filter to find specific types of memories (failure, correction, insight, etc.).',
-    ],
     parameters: Type.Object({
       query: Type.String({ description: 'Search query. Use natural language or specific terms.' }),
       project: Type.Optional(Type.String({ description: 'Filter by project name. Pass null for global memories only.' })),
-      target: Type.Optional(StringEnum(['memory', 'user', 'failure'] as const, { description: 'Filter by target type (memory, user, or failure).' })),
-      category: Type.Optional(StringEnum(['failure', 'correction', 'insight', 'preference', 'convention', 'tool-quirk'] as const, { description: 'Filter by memory category.' })),
+      target: Type.Optional(Type.Union([Type.Literal('memory'), Type.Literal('user'), Type.Literal('failure')], { description: 'Filter by target type (memory, user, or failure).' })),
+      category: Type.Optional(Type.Union([Type.Literal('failure'), Type.Literal('correction'), Type.Literal('insight'), Type.Literal('preference'), Type.Literal('convention'), Type.Literal('tool-quirk')], { description: 'Filter by memory category.' })),
       limit: Type.Optional(Type.Number({ description: 'Maximum results to return (default: 10, max: 20).' })),
     }),
     execute: async (_id: string, args: { query: string; project?: string; target?: string; category?: string; limit?: number }) => {

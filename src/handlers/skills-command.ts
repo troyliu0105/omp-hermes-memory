@@ -5,20 +5,15 @@
 import { createHash } from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { SkillStore } from "../store/skill-store.js";
 import type { SkillIndex, SkillResult, SkillScope } from "../types.js";
-import {
-  Input,
-  Key,
-  fuzzyFilter,
-  matchesKey,
-  truncateToWidth,
-  visibleWidth,
-  wrapTextWithAnsi,
-  type Focusable,
-  type TUI,
-} from "@earendil-works/pi-tui";
+import { Input } from "@oh-my-pi/pi-tui/components/input";
+import { fuzzyFilter } from "@oh-my-pi/pi-tui/fuzzy";
+import { Key, matchesKey } from "@oh-my-pi/pi-tui/keys";
+import type { Focusable, TUI } from "@oh-my-pi/pi-tui/tui";
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui/utils";
 
 export const MEMORY_SKILLS_KEYMAP = {
   moveGlobal: "g",
@@ -1106,7 +1101,7 @@ export class SkillsManagerModal implements Focusable {
 
   private renderFramedLine(content: string, width: number): string {
     const innerWidth = Math.max(10, width - 4);
-    const padded = truncateToWidth(content, innerWidth, "");
+    const padded = truncateToWidth(content, innerWidth, null);
     const spaces = Math.max(0, innerWidth - visibleWidth(padded));
     return `${this.theme.fg("borderAccent", "│")} ${padded}${" ".repeat(spaces)} ${this.theme.fg("borderAccent", "│")}`;
   }
@@ -1145,8 +1140,8 @@ export class SkillsManagerModal implements Focusable {
       const cursor = i === this.filterCursor ? this.theme.fg("accent", "›") : " ";
       const text = `${cursor} ${checked} ${option.label}`;
       const rendered = i === this.filterCursor
-        ? this.theme.bg("selectedBg", truncateToWidth(text, Math.max(10, panelWidth - 4), ""))
-        : truncateToWidth(text, Math.max(10, panelWidth - 4), "");
+        ? this.theme.bg("selectedBg", truncateToWidth(text, Math.max(10, panelWidth - 4), null))
+        : truncateToWidth(text, Math.max(10, panelWidth - 4), null);
       lines.push(this.renderFramedLine(rendered, panelWidth));
     }
 
@@ -1208,8 +1203,8 @@ export class SkillsManagerModal implements Focusable {
 
         const baseText = `${cursor} ${check} ${category} ${row.displayName} (${row.displayPath})`;
         const lineText = absoluteIndex === this.selectedIndex
-          ? this.theme.bg("selectedBg", truncateToWidth(baseText, Math.max(10, safeWidth - 4), ""))
-          : truncateToWidth(baseText, Math.max(10, safeWidth - 4), "");
+          ? this.theme.bg("selectedBg", truncateToWidth(baseText, Math.max(10, safeWidth - 4), null))
+          : truncateToWidth(baseText, Math.max(10, safeWidth - 4), null);
         lines.push(this.renderFramedLine(lineText, safeWidth));
       }
 
@@ -1308,13 +1303,6 @@ export function registerSkillsCommand(pi: ExtensionAPI, store: SkillStore): void
           ),
           {
             overlay: true,
-            overlayOptions: {
-              anchor: "center",
-              width: "92%",
-              minWidth: 76,
-              maxHeight: "88%",
-              margin: 1,
-            },
           },
         );
       } catch {

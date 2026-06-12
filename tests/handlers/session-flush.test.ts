@@ -191,7 +191,7 @@ describe("setupSessionFlush", () => {
 
   // ── Exec args verification ──────────────────────────────────────────
 
-  it("Flush uses pi.exec with correct args", async () => {
+  it("Flush uses omp.exec with correct args", async () => {
     const config = defaultConfig();
     setupSessionFlush(mockPi.pi, mockStore, null, config);
 
@@ -204,7 +204,7 @@ describe("setupSessionFlush", () => {
     assert.equal(mockPi.execCalls.length, 1);
 
     const [cmd, args, opts] = mockPi.execCalls[0].args;
-    assert.equal(cmd, "pi");
+    assert.equal(cmd, "omp");
     assert.ok(Array.isArray(args));
     assert.equal(args[0], "-p");
     assert.equal(args[1], "--no-session");

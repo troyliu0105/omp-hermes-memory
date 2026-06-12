@@ -23,7 +23,7 @@
  */
 
 import * as path from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { MemoryStore } from "./store/memory-store.js";
 import { SkillStore } from "./store/skill-store.js";
 import { DatabaseManager } from "./store/db.js";
@@ -118,7 +118,7 @@ export default function (pi: ExtensionAPI) {
   };
 
   // Keep project memory available for users upgrading from the old
-  // ~/.pi/agent/<project>/ layout. This is non-destructive: legacy folders
+  // ~/.omp/agent/<project>/ layout. This is non-destructive: legacy folders
   // remain in place while entries are copied/merged into projects-memory/.
   migrateLegacyProjectMemoryDirs(agentRoot, config.projectsMemoryDir);
   try {
@@ -128,7 +128,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   // Detect project from cwd using shared helper
-  // Project-scoped store: ~/.pi/agent/<projectsMemoryDir>/<project_name>/
+  // Project-scoped store: ~/.omp/agent/<projectsMemoryDir>/<project_name>/
   const projectConfig = project.memoryDir
     ? { ...config, memoryCharLimit: config.projectCharLimit, memoryDir: project.memoryDir }
     : { ...config, memoryDir: undefined };
@@ -160,7 +160,7 @@ export default function (pi: ExtensionAPI) {
 
     if (promptContext) {
       return {
-        systemPrompt: event.systemPrompt + "\n\n" + promptContext,
+        systemPrompt: [...event.systemPrompt, promptContext],
       };
     }
   });
@@ -204,7 +204,7 @@ export default function (pi: ExtensionAPI) {
   // ── 10. SQLite session search + extended memory ──
   registerSessionSearchTool(pi, dbManager, config.sessionSearch ?? { variant: "legacy" });
   registerMemorySearchTool(pi, dbManager);
-  registerIndexSessionsCommand(pi);
+  registerIndexSessionsCommand(pi, globalDir);
 
   // ── 11. Auto-index session on shutdown ──
   pi.on("session_shutdown", async (_event, ctx) => {

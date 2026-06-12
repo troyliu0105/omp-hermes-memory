@@ -4,9 +4,8 @@
  * See PLAN.md → "Hermes Source File Reference Map" for source lines.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { Type } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { MemoryStore } from "../store/memory-store.js";
 import { DatabaseManager } from "../store/db.js";
 import {
@@ -196,34 +195,24 @@ export function registerMemoryTool(
     name: "memory",
     label: "Memory",
     description: MEMORY_TOOL_DESCRIPTION,
-    promptSnippet:
-      "Save or manage persistent memory that survives across sessions",
-    promptGuidelines: [
-      "Use the memory tool proactively when the user corrects you, shares a preference, or reveals personal details worth remembering.",
-      "Use the memory tool when you discover environment facts, project conventions, or reusable patterns useful in future sessions.",
-      "Do NOT use memory for temporary task state, TODO items, or session progress — only for durable, cross-session facts.",
-      "Use target='failure' with category to save what didn't work (failures, corrections, insights).",
-    ],
     parameters: Type.Object({
-      action: StringEnum(["add", "replace", "remove"] as const),
-      target: StringEnum(["memory", "user", "project", "failure"] as const),
+      action: Type.Union([Type.Literal("add"), Type.Literal("replace"), Type.Literal("remove")]),
+      target: Type.Union([Type.Literal("memory"), Type.Literal("user"), Type.Literal("project"), Type.Literal("failure")]),
       content: Type.Optional(
         Type.String({ description: "Entry content for add/replace" })
       ),
+      match: Type.Optional(
+        Type.String({ description: "Substring to match for replace/remove" })
+      ),
       old_text: Type.Optional(
-        Type.String({
-          description:
-            "Substring identifying entry for replace/remove",
-        })
+        Type.String({ description: "Legacy alias for match" })
       ),
       category: Type.Optional(
-        StringEnum(["failure", "correction", "insight", "preference", "convention", "tool-quirk"] as const, {
+        Type.Union([Type.Literal("failure"), Type.Literal("correction"), Type.Literal("insight"), Type.Literal("preference"), Type.Literal("convention"), Type.Literal("tool-quirk")], {
           description: "Category for failure memories",
         })
       ),
-      failure_reason: Type.Optional(
-        Type.String({ description: "Why it failed (for failure category)" })
-      ),
+      failure_reason: Type.Optional(Type.String({ description: "Optional reason this failure happened" })),
     }),
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       const { action, target: rawTarget, content, old_text, category, failure_reason } = params;

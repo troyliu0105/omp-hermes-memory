@@ -228,7 +228,7 @@ Priority:
 Use the memory tool to save. If this contradicts an existing entry, use 'replace' to update it.`;
 
 // ─── Skill tool description ───
-export const SKILL_TOOL_DESCRIPTION = `Save reusable procedures and patterns as Pi-native skills that survive across sessions. Skills are procedural memory — they capture HOW to do something, not just what happened.
+export const SKILL_TOOL_DESCRIPTION = `Save reusable procedures and patterns as OMP-native skills that survive across sessions. Skills are procedural memory — they capture HOW to do something, not just what happened.
 
 Use create for a new skill, patch for a targeted section update, update for a full rewrite, view to inspect existing skills, and delete to remove obsolete ones. When creating a skill, scope is required: use global for portable workflows and project for procedures tied to this repo's paths, scripts, architecture, deploy steps, or conventions.
 

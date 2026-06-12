@@ -1,9 +1,9 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import type { MemoryConfig, ThinkingLevel } from "../types.js";
 
 type ChildLlmConfig = Pick<MemoryConfig, "llmModelOverride" | "llmThinkingOverride">;
 
-interface PiExecResult {
+interface ChildExecResult {
   code: number;
   stdout?: string;
   stderr?: string;
@@ -15,6 +15,7 @@ interface ExecChildPromptOptions {
   retryWithoutOverrides?: boolean;
 }
 
+const CHILD_COMMAND = "omp";
 const OVERRIDE_FAILURE_SUBJECT = /\b(model|provider|thinking)\b/i;
 const OVERRIDE_FAILURE_REASON = /\b(not found|unknown|invalid|unsupported|unavailable|unrecognized|no match|no matches|cannot resolve|failed to resolve)\b/i;
 
@@ -76,7 +77,7 @@ function shouldRetryWithoutOverridesFromText(text: string | undefined): boolean 
   return OVERRIDE_FAILURE_SUBJECT.test(text) && OVERRIDE_FAILURE_REASON.test(text);
 }
 
-function shouldRetryWithoutOverrides(result: PiExecResult): boolean {
+function shouldRetryWithoutOverrides(result: ChildExecResult): boolean {
   return shouldRetryWithoutOverridesFromText(result.stderr) || shouldRetryWithoutOverridesFromText(result.stdout);
 }
 
@@ -89,14 +90,14 @@ export async function execChildPrompt(
   prompt: string,
   config: ChildLlmConfig,
   options: ExecChildPromptOptions,
-): Promise<PiExecResult> {
+): Promise<ChildExecResult> {
   const execOptions = {
     signal: options.signal,
     timeout: options.timeoutMs,
   };
 
   try {
-    const result = await pi.exec("pi", buildChildPiPromptArgs(prompt, config), execOptions) as PiExecResult;
+    const result = await pi.exec(CHILD_COMMAND, buildChildPiPromptArgs(prompt, config), execOptions) as ChildExecResult;
     if (
       result.code === 0 ||
       !options.retryWithoutOverrides ||
@@ -115,5 +116,5 @@ export async function execChildPrompt(
     }
   }
 
-  return pi.exec("pi", basePromptArgs(prompt), execOptions) as Promise<PiExecResult>;
+  return pi.exec(CHILD_COMMAND, basePromptArgs(prompt), execOptions) as Promise<ChildExecResult>;
 }

@@ -95,28 +95,28 @@ describe("loadConfig", () => {
   it("expands ~/ memoryDir into an absolute home path", () => {
     fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
-      memoryDir: "~/.pi/agent/pi-hermes-memory",
+      memoryDir: "~/.omp/agent/pi-hermes-memory",
     }));
 
     const config = loadConfig(TEST_CONFIG_PATH);
-    assert.strictEqual(config.memoryDir, path.join(os.homedir(), ".pi", "agent", "pi-hermes-memory"));
+    assert.strictEqual(config.memoryDir, path.join(os.homedir(), ".omp", "agent", "pi-hermes-memory"));
   });
 
-  it("resolves relative memoryDir values against ~/.pi/agent instead of cwd", () => {
+  it("resolves relative memoryDir values against ~/.omp/agent instead of cwd", () => {
     fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
       memoryDir: "custom-memory-root",
     }));
 
     const config = loadConfig(TEST_CONFIG_PATH);
-    assert.strictEqual(config.memoryDir, path.join(os.homedir(), ".pi", "agent", "custom-memory-root"));
+    assert.strictEqual(config.memoryDir, path.join(os.homedir(), ".omp", "agent", "custom-memory-root"));
   });
 
-  it("normalizes projectsMemoryDir inside ~/.pi/agent and ignores unsafe values", () => {
+  it("normalizes projectsMemoryDir inside ~/.omp/agent and ignores unsafe values", () => {
     fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
 
     fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
-      projectsMemoryDir: " ~/.pi/agent/team-projects/ ",
+      projectsMemoryDir: " ~/.omp/agent/team-projects/ ",
     }));
     let config = loadConfig(TEST_CONFIG_PATH);
     assert.strictEqual(config.projectsMemoryDir, "team-projects");
