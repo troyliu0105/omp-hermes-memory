@@ -9,8 +9,8 @@ This is a Pi coding agent extension that brings Hermes-style persistent memory a
 ## Architecture
 
 - **Language**: TypeScript (loaded via jiti, no compilation needed at runtime)
-- **Runtime**: Pi extension API (`@earendil-works/pi-coding-agent`)
-- **Storage**: Two markdown files (`MEMORY.md`, `USER.md`) in `~/.pi/agent/memory/`
+- **Runtime**: Oh My Pi plugin API (`@oh-my-pi/pi-coding-agent`)
+- **Storage**: Markdown files (`MEMORY.md`, `USER.md`, `failures.md`) + `sessions.db` in `~/.omp/agent/omp-hermes-memory/`
 - **Entry point**: `src/index.ts` — registers tools, event handlers, and commands
 
 ## Key Files

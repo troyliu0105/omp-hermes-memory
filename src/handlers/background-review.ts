@@ -3,8 +3,8 @@
  * Ported from hermes-agent/run_agent.py (_spawn_background_review, _memory_nudge_interval).
  * See PLAN.md → "Hermes Source File Reference Map" for source lines.
  *
- * Uses pi.exec("pi", ["-p", ...]) for isolated one-shot review,
- * keeping us within Pi's intended extension API.
+ * Uses pi.exec("omp", ["-p", ...]) for isolated one-shot review,
+ * keeping us within OMP's intended extension API.
  */
 
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";

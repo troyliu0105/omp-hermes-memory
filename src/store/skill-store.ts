@@ -1,14 +1,14 @@
 /**
  * SkillStore — procedural memory stored as OMP-native skills.
  *
- * Global skills live in ~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md.
+ * Global skills live in ~/.omp/agent/omp-hermes-memory/skills/<slug>/SKILL.md.
  * Project skills live in ~/.omp/agent/<projectsMemoryDir>/<project>/skills/<slug>/SKILL.md.
  */
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as os from "node:os";
 import { scanContent } from "./content-scanner.js";
+import { AGENT_ROOT, HERMES_MEMORY_DIR_NAME } from "../paths.js";
 import {
   buildSkillId,
   exists,
@@ -53,16 +53,15 @@ export class SkillStore {
   private legacySkillsDir: string;
   private legacyPiGlobalSkillsDir: string;
   private migrationSentinelPath: string;
-
   constructor(options: SkillStoreOptions = {}) {
-    const agentRoot = path.join(os.homedir(), ".pi", "agent");
+    const agentRoot = AGENT_ROOT;
     this.globalSkillsDir = options.globalSkillsDir ?? path.join(agentRoot, "skills");
     this.projectSkillsDir = options.projectSkillsDir ?? null;
     this.projectName = options.projectName ?? null;
     this.legacySkillsDir = options.legacySkillsDir ?? path.join(agentRoot, "memory", "skills");
     this.legacyPiGlobalSkillsDir = options.legacyPiGlobalSkillsDir ?? path.join(agentRoot, "skills");
     this.migrationSentinelPath = options.migrationSentinelPath
-      ?? path.join(agentRoot, "pi-hermes-memory", ".skills-migrated-to-extension-storage");
+      ?? path.join(agentRoot, HERMES_MEMORY_DIR_NAME, ".skills-migrated-to-extension-storage");
   }
 
   getGlobalSkillsDir(): string {

@@ -2,7 +2,7 @@
  * Auto-consolidation — when memory hits capacity, trigger automatic
  * consolidation instead of returning an error.
  *
- * Uses pi.exec() to spawn a one-shot consolidation process.
+ * Uses omp.exec() to spawn a one-shot consolidation process.
  * The child process modifies files on disk, so the parent MUST reload
  * from disk after consolidation completes.
  */

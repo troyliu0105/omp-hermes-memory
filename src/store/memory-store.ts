@@ -16,6 +16,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { scanContent } from "./content-scanner.js";
 import { normalizeMemoryLookupText } from "./memory-lookup.js";
+import { HERMES_MEMORY_DIR_NAME } from "../paths.js";
 import {
   ENTRY_DELIMITER,
   DEFAULT_MEMORY_CHAR_LIMIT,
@@ -47,7 +48,7 @@ export class MemoryStore {
   // ─── Path helpers ───
 
   private get memoryDir(): string {
-    return this.config.memoryDir ?? path.join(os.homedir(), ".omp", "agent", "pi-hermes-memory");
+    return this.config.memoryDir ?? path.join(os.homedir(), ".omp", "agent", HERMES_MEMORY_DIR_NAME);
   }
 
   private pathFor(target: "memory" | "user" | "failure"): string {

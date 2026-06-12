@@ -18,7 +18,7 @@ afterEach(() => {
 describe("migrateExtensionRoot", () => {
   it("moves legacy files into new extension root", async () => {
     const legacy = path.join(tmpDir, "memory");
-    const target = path.join(tmpDir, "pi-hermes-memory");
+    const target = path.join(tmpDir, "omp-hermes-memory");
     fs.mkdirSync(path.join(legacy, "skills", "abc"), { recursive: true });
     fs.writeFileSync(path.join(legacy, "MEMORY.md"), "legacy memory", "utf-8");
     fs.writeFileSync(path.join(legacy, "skills", "abc", "SKILL.md"), "legacy skill", "utf-8");
@@ -33,7 +33,7 @@ describe("migrateExtensionRoot", () => {
 
   it("does not overwrite existing target files", async () => {
     const legacy = path.join(tmpDir, "memory");
-    const target = path.join(tmpDir, "pi-hermes-memory");
+    const target = path.join(tmpDir, "omp-hermes-memory");
     fs.mkdirSync(legacy, { recursive: true });
     fs.mkdirSync(target, { recursive: true });
 

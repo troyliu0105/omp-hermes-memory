@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Ported the plugin to Oh My Pi as `omp-hermes-memory`: package metadata now uses an OMP manifest and `@oh-my-pi/*` dependencies, child background tasks run through `omp`, and OMP command loading works via `omp -e` / `omp plugin link`.
-- Kept the `pi-hermes-memory` config and storage format, but moved the active OMP roots to `~/.omp/agent/hermes-memory-config.json`, `~/.omp/agent/pi-hermes-memory/`, `~/.omp/agent/projects-memory/<project>/`, and `~/.omp/agent/sessions/`. 
+- Kept the `pi-hermes-memory` config and file formats, but moved the active OMP roots to `~/.omp/agent/hermes-memory-config.json`, `~/.omp/agent/omp-hermes-memory/`, `~/.omp/agent/projects-memory/<project>/`, and `~/.omp/agent/sessions/`. The global storage leaf is renamed from `pi-hermes-memory` to `omp-hermes-memory` to match the package name.
 
 ### Tests
 

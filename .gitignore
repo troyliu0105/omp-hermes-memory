@@ -13,8 +13,8 @@ dist/
 # Hermes agent source (used only as reference during development)
 hermes-agent/
 
-# Pi agent state
-.pi/
+# OMP agent state
+.omp/
 
 # IDE
 .idea/

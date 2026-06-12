@@ -42,15 +42,15 @@ export interface MemoryConfig {
   flushMinTurns: number;
   /** Recent conversation messages included in session flush. 0 = all. Default: 0 */
   flushRecentMessages?: number;
-  /** Override extension storage directory. Default: ~/.omp/agent/pi-hermes-memory */
+  /** Override extension storage directory. Default: ~/.omp/agent/omp-hermes-memory */
   memoryDir?: string;
   /** Directory for project-scoped memory (relative to ~/.omp/agent). Default: "projects-memory" */
   projectsMemoryDir?: string;
   /** Session search configuration. Default: { variant: "legacy" } */
   sessionSearch?: SessionSearchConfig;
-  /** Override model used for child pi -p subprocess LLM calls. Default: unset */
+  /** Override model used for child omp -p subprocess LLM calls. Default: unset */
   llmModelOverride?: string;
-  /** Override thinking level used for child pi -p subprocess LLM calls. Default: unset */
+  /** Override thinking level used for child omp -p subprocess LLM calls. Default: unset */
   llmThinkingOverride?: ThinkingLevel;
   /** Strategy when memory is full. Default: auto-consolidate */
   memoryOverflowStrategy?: MemoryOverflowStrategy;

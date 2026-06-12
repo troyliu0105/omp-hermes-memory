@@ -166,7 +166,7 @@ describe("setupBackgroundReview", () => {
     assert.strictEqual(execCalls.length, 1, "exec should be called once at turn 10");
     // Verify it calls pi.exec with review prompt
     const execArgs = execCalls[0];
-    assert.strictEqual(execArgs[0], "pi", "exec first arg should be 'pi'");
+    assert.strictEqual(execArgs[0], "omp", "exec first arg should be 'omp'");
     const cmdArgs: string[] = execArgs[1];
     assert.ok(cmdArgs[0] === "-p", "should use -p flag");
     assert.ok(cmdArgs.includes("--no-session"), "should include --no-session");

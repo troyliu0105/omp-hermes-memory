@@ -39,10 +39,10 @@ omp plugin add npm:omp-hermes-memory
 
 ## OMP Storage Layout Compatibility
 
-This OMP port preserves the `pi-hermes-memory` file formats and directory layout shape, but stores them under OMP roots.
+This OMP port keeps the `pi-hermes-memory` file formats (`MEMORY.md`/`USER.md` with `§` delimiters, `sessions.db` schema, `SKILL.md` frontmatter) but stores everything under OMP roots. The global storage leaf is named `omp-hermes-memory` to match the package name.
 
 - Config path: `~/.omp/agent/hermes-memory-config.json`
-- Global memory root: `~/.omp/agent/pi-hermes-memory/`
+- Global memory root: `~/.omp/agent/omp-hermes-memory/`
 - Project memory root: `~/.omp/agent/projects-memory/<project>/`
 - Session indexing root: `~/.omp/agent/sessions/`
 
@@ -52,8 +52,8 @@ If you already know the `pi-hermes-memory` config schema and markdown/SQLite fil
 
 If you’re upgrading from older versions, startup now auto-migrates extension data safely inside OMP storage:
 
-- legacy extension root: `~/.omp/agent/memory` → `~/.omp/agent/pi-hermes-memory`
-- legacy flat skills: `~/.omp/agent/pi-hermes-memory/skills/*.md` → `~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md`
+- legacy extension root: `~/.omp/agent/memory` → `~/.omp/agent/omp-hermes-memory`
+- legacy flat skills: `~/.omp/agent/omp-hermes-memory/skills/*.md` → `~/.omp/agent/omp-hermes-memory/skills/<slug>/SKILL.md`
 
 This resolves skill index conflicts like:
 
@@ -127,7 +127,7 @@ The extension stores memory at two levels:
 
 | Tier | Location | What goes here | Available when |
 |---|---|---|---|
-| **Global** | `~/.omp/agent/pi-hermes-memory/` | Facts that apply everywhere — your name, preferences, OS, tools | Searchable via `memory_search` |
+| **Global** | `~/.omp/agent/omp-hermes-memory/` | Facts that apply everywhere — your name, preferences, OS, tools | Searchable via `memory_search` |
 | **Project** | `~/.omp/agent/projects-memory/<project>/` | Facts scoped to one codebase — architecture decisions, API quirks, team norms | Searchable when cwd matches the project |
 
 By default, full Markdown memories are **not** injected into the system prompt. The system prompt gets a full-detail `<memory-policy>` that tells the agent when to call `memory_search` and how to treat memory results. This keeps first-turn token usage low while preserving access to user, project, failure, correction, insight, preference, convention, and tool-quirk memories.
@@ -209,7 +209,7 @@ The agent also gets a `skill` tool for saving reusable procedures:
 
 Skills are stored in OMP-native locations:
 
-- Global skills: `~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md`
+- Global skills: `~/.omp/agent/omp-hermes-memory/skills/<slug>/SKILL.md`
 - Project skills: `~/.omp/agent/projects-memory/<project>/skills/<slug>/SKILL.md`
 
 New skills must choose scope explicitly:
@@ -276,7 +276,7 @@ This lets OMP discover project skills as native skills without copying them into
 |---|---|---|---|
 | **memory** | `MEMORY.md` | Agent's notes — env facts, project conventions, tool quirks, lessons learned | 5,000 chars |
 | **user** | `USER.md` | User profile — name, preferences, communication style, habits | 5,000 chars |
-| **skills** | `~/.omp/agent/pi-hermes-memory/skills/<slug>/SKILL.md` or `projects-memory/<project>/skills/<slug>/SKILL.md` | Procedures — *how* to debug, deploy, test, or fix something | Unlimited |
+| **skills** | `~/.omp/agent/omp-hermes-memory/skills/<slug>/SKILL.md` or `projects-memory/<project>/skills/<slug>/SKILL.md` | Procedures — *how* to debug, deploy, test, or fix something | Unlimited |
 | **extended** | `sessions.db` | Searchable memories beyond the core limit | Unlimited |
 | **sessions** | `sessions.db` | Past conversation history (searchable via FTS5) | Unlimited |
 
@@ -432,7 +432,7 @@ Create `~/.omp/agent/hermes-memory-config.json`:
   "memoryCharLimit": 5000,
   "userCharLimit": 5000,
   "projectCharLimit": 5000,
-  "memoryDir": "~/.omp/agent/pi-hermes-memory",
+  "memoryDir": "~/.omp/agent/omp-hermes-memory",
   "projectsMemoryDir": "projects-memory",
   "sessionSearch": { "variant": "legacy" },
   "llmModelOverride": "openrouter/deepseek/deepseek-v4-flash",
@@ -463,7 +463,7 @@ Create `~/.omp/agent/hermes-memory-config.json`:
 | `memoryCharLimit` | `5000` | Max characters in MEMORY.md |
 | `userCharLimit` | `5000` | Max characters in USER.md |
 | `projectCharLimit` | `5000` | Max characters in project-scoped MEMORY.md |
-| `memoryDir` | `~/.omp/agent/pi-hermes-memory` | Custom directory for extension storage files |
+| `memoryDir` | `~/.omp/agent/omp-hermes-memory` | Custom directory for extension storage files |
 | `projectsMemoryDir` | `projects-memory` | Subdirectory under `~/.omp/agent/` for project-scoped memory |
 | `sessionSearch` | `{ "variant": "legacy" }` | Session search implementation: `legacy` keeps the existing SQLite/FTS snippet search; `anchors` uses the opt-in Markdown request surface and returns compact JSONL line-range anchors from `~/.omp/agent/sessions/` |
 | `llmModelOverride` | unset | Optional model override for child `omp -p` subprocess calls used by background review, correction save, session flush, and consolidation |
@@ -492,7 +492,7 @@ Create `~/.omp/agent/hermes-memory-config.json`:
 
 ```
 ~/.omp/agent/
-├── pi-hermes-memory/      ← Global extension storage root
+├── omp-hermes-memory/      ← Global extension storage root
 │   ├── MEMORY.md          ← Agent's personal notes (env facts, patterns, lessons)
 │   ├── USER.md            ← User profile (name, preferences, habits)
 │   ├── sessions.db        ← SQLite database (session history + extended memory)
@@ -530,7 +530,7 @@ The `sessions.db` SQLite database stores session history and extended memory ent
 - **System prompts are invisible**: OMP's TUI does not display the system prompt. Use `/memory-preview-context` to inspect whether policy-only or legacy memory injection is active.
 - **Project skill visibility depends on OMP discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a moved or newly created project skill doesn't show up immediately in a running session, trigger a reload/new session so OMP refreshes discovered resources.
 - **Project move requires active project context**: in `/memory-skills`, the `p` hotkey is disabled when OMP is not currently in a detected project directory.
-- **Skills still need curation**: Skills are saved by the agent through the `skill` tool when it decides a reusable procedure is worth keeping. They may still need review. You can move, delete, or edit them directly in `~/.omp/agent/pi-hermes-memory/skills/` or the active project's `skills/` folder.
+- **Skills still need curation**: Skills are saved by the agent through the `skill` tool when it decides a reusable procedure is worth keeping. They may still need review. You can move, delete, or edit them directly in `~/.omp/agent/omp-hermes-memory/skills/` or the active project's `skills/` folder.
 
 ## Architecture
 

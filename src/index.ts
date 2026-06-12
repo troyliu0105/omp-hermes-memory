@@ -1,8 +1,8 @@
 /**
- * Pi Hermes Memory Extension
+ * OMP Hermes Memory Extension
  *
- * Brings Hermes-style persistent memory and a learning loop to any Pi user.
- * After `pi install`, users get:
+ * Brings Hermes-style persistent memory and a learning loop to any Oh My Pi user.
+ * After `omp plugin add`, users get:
  *
  * 1. Persistent Memory — MEMORY.md + USER.md that survive across sessions
  * 2. Background Learning Loop — auto-saves notable facts every N turns
@@ -50,7 +50,7 @@ import { detectProject, detectProjectSkills } from "./project.js";
 import { buildPromptContext } from "./prompt-context.js";
 import { migrateLegacyProjectMemoryDirs } from "./project-memory-migration.js";
 import { migrateExtensionRoot } from "./extension-root-migration.js";
-import { AGENT_ROOT } from "./paths.js";
+import { AGENT_ROOT, HERMES_MEMORY_DIR_NAME } from "./paths.js";
 
 export function resolveProjectSkillDiscovery(
   skillStore: SkillStore,
@@ -81,7 +81,7 @@ export default function (pi: ExtensionAPI) {
 
   const agentRoot = AGENT_ROOT;
   const legacyGlobalDir = path.join(agentRoot, "memory");
-  const defaultGlobalDir = path.join(agentRoot, "pi-hermes-memory");
+  const defaultGlobalDir = path.join(agentRoot, HERMES_MEMORY_DIR_NAME);
 
   const configuredMemoryDir = config.memoryDir?.trim();
   const pointsToLegacyMemoryDir = configuredMemoryDir

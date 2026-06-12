@@ -11,7 +11,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/exten
 import type { MemoryConfig } from "../types.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as os from "node:os";
+import { AGENT_ROOT } from "../paths.js";
 
 export function registerSwitchProjectCommand(pi: ExtensionAPI, config?: MemoryConfig): void {
   const projectsMemoryDir = config?.projectsMemoryDir ?? "projects-memory";
@@ -19,8 +19,7 @@ export function registerSwitchProjectCommand(pi: ExtensionAPI, config?: MemoryCo
     description: "Switch the active project for project-scoped memory",
 
     async handler(_args, ctx) {
-      const homeDir = os.homedir();
-      const agentDir = path.join(homeDir, ".pi", "agent");
+      const agentDir = AGENT_ROOT;
       const projectsDir = path.join(agentDir, projectsMemoryDir);
 
       // Discover all project directories (subdirectories of projects-memory/ that have MEMORY.md)

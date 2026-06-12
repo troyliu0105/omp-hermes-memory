@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { DEFAULT_PROJECTS_MEMORY_DIR } from "./constants.js";
 
 export const AGENT_ROOT = path.join(os.homedir(), ".omp", "agent");
+export const HERMES_MEMORY_DIR_NAME = "omp-hermes-memory";
 export const OMP_CONFIG_PATH = path.join(AGENT_ROOT, "hermes-memory-config.json");
 export const OMP_SESSIONS_DIR = path.join(AGENT_ROOT, "sessions");
 

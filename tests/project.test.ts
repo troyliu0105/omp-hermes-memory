@@ -17,7 +17,7 @@ describe("project detection", () => {
     assert.strictEqual(result.name, "demo-repo");
     assert.strictEqual(
       result.memoryDir,
-      path.join(os.homedir(), ".pi", "agent", "projects-memory", "demo-repo"),
+      path.join(os.homedir(), ".omp", "agent", "projects-memory", "demo-repo"),
     );
   });
 
@@ -28,7 +28,7 @@ describe("project detection", () => {
     assert.strictEqual(result.name, "demo-repo");
     assert.strictEqual(
       result.skillsDir,
-      path.join(os.homedir(), ".pi", "agent", "projects-memory", "demo-repo", "skills"),
+      path.join(os.homedir(), ".omp", "agent", "projects-memory", "demo-repo", "skills"),
     );
   });
 });

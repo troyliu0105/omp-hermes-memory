@@ -69,7 +69,7 @@ async function moveDirContents(sourceDir: string, targetDir: string, result: Ext
 
 /**
  * Move legacy extension assets from ~/.omp/agent/memory into
- * ~/.omp/agent/pi-hermes-memory. Existing destination files win.
+ * ~/.omp/agent/omp-hermes-memory. Existing destination files win.
  */
 export async function migrateExtensionRoot(
   legacyRoot: string,
