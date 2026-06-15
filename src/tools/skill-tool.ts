@@ -1,5 +1,5 @@
 /**
- * Skill tool — registers the LLM-callable `skill` tool for procedural memory.
+ * Skill manager tool — registers the LLM-callable `skill_manage` tool for procedural memory.
  * Complements the `memory` tool (declarative knowledge) with procedural knowledge.
  */
 
@@ -91,10 +91,12 @@ const SKILL_TOOL_PARAMETERS = Type.Object({
   })),
 }, { additionalProperties: false });
 
+export const SKILL_MANAGE_TOOL_NAME = "skill_manage";
+
 export function registerSkillTool(pi: ExtensionAPI, store: SkillStore): void {
   pi.registerTool({
-    name: "skill",
-    label: "Skill",
+    name: SKILL_MANAGE_TOOL_NAME,
+    label: "Skill Manager",
     description: SKILL_TOOL_DESCRIPTION,
     parameters: SKILL_TOOL_PARAMETERS,
     async execute(toolCallId, params, signal, onUpdate, ctx) {

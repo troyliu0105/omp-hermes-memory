@@ -680,4 +680,147 @@ describe("setupBackgroundReview", () => {
     // Should not throw — we got here = test passed
     assert.ok(true, "no crash when getBranch throws");
   });
+
+  // ─── Idle-trigger tests ───
+
+  it("triggers review after idleReviewMs of inactivity", async () => {
+    const config = { ...defaultConfig, idleReviewMs: 20, nudgeInterval: 999, nudgeToolCalls: 999 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireTurnEnd();
+
+    assert.strictEqual(execCalls.length, 0, "no immediate review");
+    // idleTimer.unref() keeps the handle alive for manual firing; settle past 20ms.
+    await settle(40);
+
+    assert.strictEqual(execCalls.length, 1, "idle timer fired the review");
+    const triggerNotify = notifyCalls.find((n) => n.msg.includes("idle"));
+    assert.ok(triggerNotify, "trigger notification mentions idle");
+    assert.strictEqual(triggerNotify.level, "info");
+  });
+
+  it("does NOT trigger idle review when idleReviewMs is 0 (disabled)", async () => {
+    const config = { ...defaultConfig, idleReviewMs: 0, nudgeInterval: 999, nudgeToolCalls: 999 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireTurnEnd();
+    await settle(40);
+
+    assert.strictEqual(execCalls.length, 0, "idle disabled → no review");
+  });
+
+  it("cancels idle timer when new message_start arrives", async () => {
+    const config = { ...defaultConfig, idleReviewMs: 30, nudgeInterval: 999, nudgeToolCalls: 999 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireTurnEnd();
+
+    // Simulate the user starting to type before the idle timer fires.
+    const startH = handlers["message_start"];
+    assert.ok(startH, "message_start handler registered");
+    for (const fn of startH) fn({}, makeCtx());
+
+    await settle(50);
+    assert.strictEqual(execCalls.length, 0, "idle timer was cancelled by message_start");
+  });
+
+  it("skips idle review when agent is no longer idle", async () => {
+    const config = { ...defaultConfig, idleReviewMs: 20, nudgeInterval: 999, nudgeToolCalls: 999 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireTurnEnd(makeBranch(10), { isIdle: () => false });
+
+    await settle(40);
+    assert.strictEqual(execCalls.length, 0, "isIdle() false → idle review skipped");
+  });
+
+  it("clears idle timer on session shutdown", async () => {
+    const config = { ...defaultConfig, idleReviewMs: 20, nudgeInterval: 999, nudgeToolCalls: 999 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireTurnEnd();
+
+    const shutdownH = handlers["session_shutdown"];
+    assert.ok(shutdownH, "session_shutdown handler registered");
+    for (const fn of shutdownH) fn();
+
+    await settle(40);
+    assert.strictEqual(execCalls.length, 0, "shutdown cleared the idle timer");
+  });
+
+  // ─── Notification (observability) tests ───
+
+  it("emits an info notification when review triggers", async () => {
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, defaultConfig);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    for (let i = 0; i < 10; i++) fireTurnEnd();
+    await settle();
+
+    const trigger = notifyCalls.find((n) => n.msg.includes("Background review triggered"));
+    assert.ok(trigger, "emits a trigger notification");
+    assert.strictEqual(trigger.level, "info");
+    assert.ok(trigger.msg.includes("10 turns"), "trigger message names the reason");
+  });
+
+  it("emits a warning notification when the subprocess exits non-zero", async () => {
+    const pi = createMockPi({ code: 1, stdout: "", stderr: "boom" });
+    setupBackgroundReview(pi, mockStore, null, defaultConfig);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    for (let i = 0; i < 10; i++) fireTurnEnd();
+    await settle();
+
+    const warn = notifyCalls.find((n) => n.level === "warning" && n.msg.includes("failed"));
+    assert.ok(warn, "emits a warning on non-zero exit");
+  });
+
+  it("names tool-calls as the reason when that threshold fires", async () => {
+    const config = { ...defaultConfig, nudgeInterval: 999, nudgeToolCalls: 5 };
+    const pi = createMockPi();
+    setupBackgroundReview(pi, mockStore, null, config);
+
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+    fireMessageEnd("user");
+
+    // Each turn_end carries an assistant message with 3 toolCall blocks.
+    const branch = makeBranch(10);
+    const assistantMsg = { role: "assistant", content: [
+      { type: "toolCall" }, { type: "toolCall" }, { type: "toolCall" },
+    ] };
+    const h = handlers["turn_end"];
+    for (let i = 0; i < 2; i++) {
+      for (const fn of h) fn({ message: assistantMsg }, makeCtx(branch));
+    }
+    await settle();
+
+    const trigger = notifyCalls.find((n) => n.msg.includes("tool calls"));
+    assert.ok(trigger, "trigger notification names tool calls as the reason");
+  });
 });

@@ -206,6 +206,8 @@ export function setupCorrectionDetector(
         recentParts.join("\n\n"),
       );
 
+      ctx.ui.notify("🔧 Correction detected — saving memory…", "info");
+
       const result = await execChildPrompt(pi, prompt.join("\n"), config, {
         signal: undefined,
         timeoutMs: 30000,
@@ -214,8 +216,10 @@ export function setupCorrectionDetector(
       if (result.code === 0 && result.stdout) {
         const output = result.stdout.trim();
         if (output && !output.toLowerCase().includes("nothing to save")) {
-          ctx.ui.notify("🔧 Correction detected — memory updated", "info");
+          ctx.ui.notify("🔧 Correction saved to memory", "info");
         }
+      } else {
+        ctx.ui.notify("⚠️ Correction save failed (will retry on next correction)", "warning");
       }
 
       // Also save as a failure memory for learning

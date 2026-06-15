@@ -30,6 +30,7 @@ function createMockPi(execReturn?: { code: number; stdout: string; stderr: strin
 const mockStore = {
   getMemoryEntries: () => ["old entry 1", "old entry 2"],
   getUserEntries: () => ["user fact 1"],
+  getAllFailureEntries: () => ["failure lesson 1", "failure lesson 2"],
   loadFromDisk: async () => {},
 } as any;
 
@@ -186,6 +187,7 @@ describe("triggerConsolidation", () => {
     const emptyStore = {
       getMemoryEntries: () => [],
       getUserEntries: () => [],
+      getAllFailureEntries: () => [],
       loadFromDisk: async () => {},
     } as any;
 
@@ -194,6 +196,14 @@ describe("triggerConsolidation", () => {
 
     const prompt = execCalls[0][1][execCalls[0][1].length - 1];
     assert.ok(prompt.includes("(empty)"), "prompt should show (empty) for empty entries");
+  });
+
+  it("includes failure entries when target is 'failure'", async () => {
+    const pi = createMockPi();
+    await triggerConsolidation(pi, mockStore, "failure");
+
+    const prompt = execCalls[0][1][execCalls[0][1].length - 1];
+    assert.ok(prompt.includes("failure lesson 1"), "prompt should include failure entries");
   });
 });
 
@@ -218,10 +228,10 @@ describe("registerConsolidateCommand", () => {
         handler = command.handler;
       },
     } as any;
-
     const projectStore = {
       getMemoryEntries: () => ["project fact"],
       getUserEntries: () => [],
+      getAllFailureEntries: () => [],
       loadFromDisk: async () => { projectReloaded = true; },
     } as any;
 
@@ -231,15 +241,14 @@ describe("registerConsolidateCommand", () => {
       ui: { notify: (message: string) => { notifications.push(message); } },
     });
 
-    assert.strictEqual(execCalls.length, 3, "should consolidate memory, user, and project stores");
-    const projectPrompt = execCalls[2][1][execCalls[2][1].length - 1];
-    assert.ok(projectPrompt.includes("Project Memory"), "project prompt should be labeled");
-    assert.ok(projectPrompt.includes("project fact"), "project prompt should include project entries");
-    assert.ok(projectPrompt.includes("Target: 'project'"), "project prompt should use target='project'");
+    const failurePrompt = execCalls[2][1][execCalls[2][1].length - 1];
+    assert.ok(failurePrompt.includes("Failure Memory"), "failure prompt should be labeled");
+    assert.ok(failurePrompt.includes("failure lesson 1"), "failure prompt should include failure entries");
     assert.ok(projectReloaded, "project store should reload after consolidation");
     assert.ok(notifications.some((message) => message.includes("Starting memory consolidation")), "should show an initial progress notification");
     assert.ok(notifications.some((message) => message.includes("⏳ Consolidating memory")), "should show per-target progress");
     const finalNotification = notifications[notifications.length - 1] ?? "";
+    assert.ok(finalNotification.includes("failure: ✅ consolidated"), "final notification should include failure result");
     assert.ok(finalNotification.includes("project:demo-project: ✅ consolidated"), "final notification should include project result");
   });
 

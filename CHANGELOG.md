@@ -7,10 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Idle-triggered background review**: a third trigger source alongside turn count and tool-call count. After `idleReviewMs` (default 120000 ms = 2 min) of inactivity, the agent runs a background memory review. Set to `0` to disable. The idle timer is armed on `turn_end`, cancelled on new `message_start`, and cleared on `session_shutdown`.
+- **Auto-generated config file**: on first run, `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` is written atomically with every option (including `llmModelOverride` / `llmThinkingOverride` model fields) and inline documentation. The legacy `~/.omp/agent/hermes-memory-config.json` is still read for backward compatibility.
+- **Observable learning loop**: background review, correction detection, and session flush now emit user-facing notifications at every stage — trigger (`💾 Background review triggered (10 turns)…`), success (`💾 Memory auto-reviewed and updated`), and failure (`⚠️ Background review failed (will retry next cycle)`).
+
+### Fixed
+
+- **Failure-memory consolidation** ([#68](https://github.com/chandra447/pi-hermes-memory/issues/68)): `failures.md` now participates in both automatic and manual (`/memory-consolidate`) consolidation. `entriesForTarget()` regained its `failure` branch, `getAllFailureEntries()` was restored on `MemoryStore`, and the command target list includes failure again. Failure memory that exceeded its limit can now be merged down instead of growing unbounded.
+- **Shutdown WAL truncation** ([#75](https://github.com/chandra447/pi-hermes-memory/issues/75)): `dbManager.close()` runs in a `finally` block of the last-registered `session_shutdown` handler so `PRAGMA wal_checkpoint(TRUNCATE)` fires and `sessions.db-wal` stops growing across sessions.
+- **Agent-root env vars** ([#67](https://github.com/chandra447/pi-hermes-memory/issues/67)): `resolveAgentRoot()` honors `PI_CODING_AGENT_DIR` (full override) and `PI_CONFIG_DIR` (config dir name override, OMP name) instead of hardcoding `~/.omp/agent`. Users with custom agent dirs no longer have their data written to the wrong location.
+
 ### Changed
 
+- **`skill` tool renamed to `skill_manage`** ([#66](https://github.com/chandra447/pi-hermes-memory/issues/66)): the procedural-memory tool is now registered as `skill_manage` to make its purpose explicit and avoid being mistaken for a generic skill-discovery tool. Prompt text, help strings, and tests updated.
 - Ported the plugin to Oh My Pi as `omp-hermes-memory`: package metadata now uses an OMP manifest and `@oh-my-pi/*` dependencies, child background tasks run through `omp`, and OMP command loading works via `omp -e` / `omp plugin link`.
-- Kept the `pi-hermes-memory` config and file formats, but moved the active OMP roots to `~/.omp/agent/hermes-memory-config.json`, `~/.omp/agent/omp-hermes-memory/`, `~/.omp/agent/projects-memory/<project>/`, and `~/.omp/agent/sessions/`. The global storage leaf is renamed from `pi-hermes-memory` to `omp-hermes-memory` to match the package name.
+- Kept the `pi-hermes-memory` config and file formats, but moved the active OMP roots to `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json`, `~/.omp/agent/omp-hermes-memory/`, `~/.omp/agent/projects-memory/<project>/`, and `~/.omp/agent/sessions/`. The global storage leaf is renamed from `pi-hermes-memory` to `omp-hermes-memory` to match the package name.
 
 ### Tests
 

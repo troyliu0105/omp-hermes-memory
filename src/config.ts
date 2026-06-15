@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { MemoryConfig, MemoryOverflowStrategy, SessionSearchVariant, ThinkingLevel } from "./types.js";
 import {
   DEFAULT_MEMORY_CHAR_LIMIT,
@@ -11,6 +12,7 @@ import {
   DEFAULT_REVIEW_RECENT_MESSAGES,
   DEFAULT_FLUSH_RECENT_MESSAGES,
   DEFAULT_CONSOLIDATION_TIMEOUT_MS,
+  DEFAULT_IDLE_REVIEW_MS,
   DEFAULT_FAILURE_INJECTION_MAX_AGE_DAYS,
   DEFAULT_FAILURE_INJECTION_MAX_ENTRIES,
 } from "./constants.js";
@@ -18,6 +20,7 @@ import {
   normalizeConfiguredMemoryDir,
   normalizeProjectsMemoryDir,
   OMP_CONFIG_PATH,
+  OMP_CONFIG_PATH_LEGACY,
 } from "./paths.js";
 
 const MEMORY_OVERFLOW_STRATEGIES: readonly MemoryOverflowStrategy[] = ["auto-consolidate", "reject", "fifo-evict"];
@@ -55,14 +58,15 @@ const DEFAULT_CONFIG: MemoryConfig = {
   failureInjectionEnabled: true,
   failureInjectionMaxAgeDays: DEFAULT_FAILURE_INJECTION_MAX_AGE_DAYS,
   failureInjectionMaxEntries: DEFAULT_FAILURE_INJECTION_MAX_ENTRIES,
-  consolidationTimeoutMs: DEFAULT_CONSOLIDATION_TIMEOUT_MS,
   nudgeToolCalls: DEFAULT_NUDGE_TOOL_CALLS,
+  idleReviewMs: DEFAULT_IDLE_REVIEW_MS,
+  consolidationTimeoutMs: DEFAULT_CONSOLIDATION_TIMEOUT_MS,
   projectsMemoryDir: DEFAULT_PROJECTS_MEMORY_DIR,
   sessionSearch: { variant: "legacy" },
 };
-
 export const DEFAULT_CONFIG_PATH = OMP_CONFIG_PATH;
-export const DEFAULT_CONFIG_PATHS = [OMP_CONFIG_PATH] as const;
+/** Search order: primary (extension dir) → legacy (pre-v0.8 flat path). */
+export const DEFAULT_CONFIG_PATHS = [OMP_CONFIG_PATH, OMP_CONFIG_PATH_LEGACY] as const;
 
 function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>): void {
   const isNonNegativeNumber = (value: unknown): value is number => (
@@ -110,6 +114,7 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
   if (typeof parsed.failureInjectionMaxAgeDays === "number") config.failureInjectionMaxAgeDays = parsed.failureInjectionMaxAgeDays;
   if (typeof parsed.failureInjectionMaxEntries === "number") config.failureInjectionMaxEntries = parsed.failureInjectionMaxEntries;
   if (typeof parsed.nudgeToolCalls === "number") config.nudgeToolCalls = parsed.nudgeToolCalls;
+  if (isNonNegativeNumber(parsed.idleReviewMs)) config.idleReviewMs = parsed.idleReviewMs;
   if (typeof parsed.projectCharLimit === "number") config.projectCharLimit = parsed.projectCharLimit;
   if (typeof parsed.memoryDir === "string") {
     const normalizedMemoryDir = normalizeConfiguredMemoryDir(parsed.memoryDir);
@@ -137,7 +142,6 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
     config.memoryOverflowStrategy = config.autoConsolidate ? "auto-consolidate" : "reject";
   }
 }
-
 function mergeConfigFile(config: MemoryConfig, configPath: string): void {
   try {
     if (!fs.existsSync(configPath)) return;
@@ -150,12 +154,86 @@ function mergeConfigFile(config: MemoryConfig, configPath: string): void {
   }
 }
 
+/**
+ * Build the default config file body with inline documentation and explicit
+ * (empty) model override fields so users discover them. Model fields are
+ * emitted as empty strings so they serialize and invite configuration.
+ */
+function buildDefaultConfigTemplate(): Record<string, unknown> {
+  return {
+    "//": "OMP Hermes Memory — edit and restart OMP. Remove a key to restore its default.",
+    memoryMode: DEFAULT_CONFIG.memoryMode,
+    memoryPolicyStyle: DEFAULT_CONFIG.memoryPolicyStyle,
+    memoryCharLimit: DEFAULT_CONFIG.memoryCharLimit,
+    userCharLimit: DEFAULT_CONFIG.userCharLimit,
+    projectCharLimit: DEFAULT_CONFIG.projectCharLimit,
+    projectsMemoryDir: DEFAULT_CONFIG.projectsMemoryDir,
+
+    "// learning-loop": "Background review auto-saves memory every N turns, every N tool calls, or after N ms idle.",
+    reviewEnabled: DEFAULT_CONFIG.reviewEnabled,
+    nudgeInterval: DEFAULT_CONFIG.nudgeInterval,
+    nudgeToolCalls: DEFAULT_CONFIG.nudgeToolCalls,
+    idleReviewMs: DEFAULT_CONFIG.idleReviewMs,
+    reviewRecentMessages: DEFAULT_CONFIG.reviewRecentMessages ?? 0,
+
+    "// model": "Override the model used for background review / consolidation subprocesses. Empty = inherit the active model.",
+    llmModelOverride: "",
+    llmThinkingOverride: "off",
+
+    "// flush": "Save memories before compaction / shutdown.",
+    flushOnCompact: DEFAULT_CONFIG.flushOnCompact,
+    flushOnShutdown: DEFAULT_CONFIG.flushOnShutdown,
+    flushMinTurns: DEFAULT_CONFIG.flushMinTurns,
+    flushRecentMessages: DEFAULT_CONFIG.flushRecentMessages ?? 0,
+
+    "// overflow": "Strategy when memory is full: auto-consolidate | reject | fifo-evict.",
+    memoryOverflowStrategy: DEFAULT_CONFIG.memoryOverflowStrategy,
+
+    "// correction": "Detect user corrections and save immediately.",
+    correctionDetection: DEFAULT_CONFIG.correctionDetection,
+
+    "// failure-injection": "Inject recent failure memories into the system prompt.",
+    failureInjectionEnabled: DEFAULT_CONFIG.failureInjectionEnabled,
+    failureInjectionMaxAgeDays: DEFAULT_CONFIG.failureInjectionMaxAgeDays,
+    failureInjectionMaxEntries: DEFAULT_CONFIG.failureInjectionMaxEntries,
+
+    consolidationTimeoutMs: DEFAULT_CONFIG.consolidationTimeoutMs,
+    sessionSearch: DEFAULT_CONFIG.sessionSearch,
+  };
+}
+
+/**
+ * Write the default config file atomically (temp + rename) so the first run
+ * gives users a discoverable, fully-documented configuration. Only the primary
+ * default path is ever written; legacy paths and explicit `configPath` args
+ * (used by tests) are read-only. Best-effort: failures are silently ignored.
+ */
+function ensureDefaultConfigFile(configPath: string): void {
+  if (configPath !== OMP_CONFIG_PATH) return;
+  try {
+    if (fs.existsSync(configPath)) return;
+    const dir = path.dirname(configPath);
+    fs.mkdirSync(dir, { recursive: true });
+    const body = JSON.stringify(buildDefaultConfigTemplate(), null, 2) + "\n";
+    const tmp = `${configPath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, body, "utf-8");
+    fs.renameSync(tmp, configPath);
+  } catch {
+    // Best-effort — missing config file is not fatal.
+  }
+}
+
 export function loadConfig(configPath?: string): MemoryConfig {
+  const usingDefaultPaths = configPath === undefined;
   const config: MemoryConfig = { ...DEFAULT_CONFIG };
   const configPaths = configPath ? [configPath] : [...DEFAULT_CONFIG_PATHS];
 
-  for (const path of configPaths) {
-    mergeConfigFile(config, path);
+  if (usingDefaultPaths) {
+    ensureDefaultConfigFile(OMP_CONFIG_PATH);
+  }
+
+  for (const p of configPaths) {
+    mergeConfigFile(config, p);
   }
 
   return config;

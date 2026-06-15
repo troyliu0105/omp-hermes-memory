@@ -207,6 +207,11 @@ export default function (pi: ExtensionAPI) {
   registerIndexSessionsCommand(pi, globalDir);
 
   // ── 11. Auto-index session on shutdown ──
+  // Ordering is safe: OMP's ExtensionRunner.emit() runs same-extension handlers
+  // sequentially in registration order and awaits each one, so any DB writes
+  // above fully complete before close() runs. WARNING: do not register another
+  // DB-writing session_shutdown handler after this block — it would run after
+  // close() and silently no-op.
   pi.on("session_shutdown", async (_event, ctx) => {
     try {
       const sessionFile = ctx.sessionManager.getSessionFile();
@@ -218,6 +223,8 @@ export default function (pi: ExtensionAPI) {
       }
     } catch {
       // Silent fail — don't block shutdown
+    } finally {
+      try { dbManager.close(); } catch { /* best effort — never block shutdown */ }
     }
   });
 }

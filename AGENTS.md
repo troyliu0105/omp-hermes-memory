@@ -1,8 +1,8 @@
-# Pi Hermes Memory Extension
+# OMP Hermes Memory Extension
 
 ## Project Overview
 
-This is a Pi coding agent extension that brings Hermes-style persistent memory and a learning loop to any Pi user. After `pi install`, users get persistent memory across sessions, a background learning loop, and session-end flush.
+This is an Oh My Pi extension that brings Hermes-style persistent memory and a learning loop to any OMP user. After `omp plugin install`, users get persistent memory across sessions, a background learning loop, and session-end flush.
 
 **v0.1 is complete** (119 tests, v0.1.0 tagged). Current work is **v0.2: Skills + Smart Curation** — see `docs/0.2/TASKS.md`.
 
@@ -64,11 +64,11 @@ The implementation is ported from the Hermes agent harness. See `PLAN.md` → "H
 npm run check
 
 # Test locally
-pi -e ./src/index.ts
+omp -e ./src/index.ts
 ```
 
 ## Installation (for users)
 
 ```bash
-pi install github:chandra447/pi-hermes-memory
+omp plugin install github:troyliu0105/omp-hermes-memory
 ```

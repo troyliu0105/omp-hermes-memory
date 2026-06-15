@@ -1,3 +1,6 @@
+> **Forked & ported from [chandra447/pi-hermes-memory](https://github.com/chandra447/pi-hermes-memory).**
+> Full credit to **[@chandra447](https://github.com/chandra447)** for the original design and implementation — this project is an Oh My Pi port of that work.
+
 <div align="center">
 
 ![Pi Hermes Memory](docs/images/pi_memory.png)
@@ -25,7 +28,7 @@ Your Oh My Pi agent normally forgets everything when you close a session. **This
 
 ```bash
 # Install in Oh My Pi
-omp plugin add npm:omp-hermes-memory
+omp plugin install github:troyliu0105/omp-hermes-memory
 
 # Index your past sessions (one-time)
 /memory-index-sessions
@@ -41,7 +44,7 @@ omp plugin add npm:omp-hermes-memory
 
 This OMP port keeps the `pi-hermes-memory` file formats (`MEMORY.md`/`USER.md` with `§` delimiters, `sessions.db` schema, `SKILL.md` frontmatter) but stores everything under OMP roots. The global storage leaf is named `omp-hermes-memory` to match the package name.
 
-- Config path: `~/.omp/agent/hermes-memory-config.json`
+- Config path: `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` (auto-generated on first run with all options + model fields; the legacy `~/.omp/agent/hermes-memory-config.json` is still read for backward compatibility)
 - Global memory root: `~/.omp/agent/omp-hermes-memory/`
 - Project memory root: `~/.omp/agent/projects-memory/<project>/`
 - Session indexing root: `~/.omp/agent/sessions/`
@@ -70,7 +73,7 @@ No manual action is needed. Launch OMP once after upgrade to let migration/norma
 | 🔄 **Memory Search Sync** | Successful Markdown memory writes are mirrored into SQLite for `memory_search` |
 | ⚠️ **Failure Memory** | Learn from failures — stores what didn't work and why |
 | 📚 **Procedural Skills** | The agent saves *how* it solved problems as reusable docs |
-| ⚡ **Background Learning** | Every 10 turns (or 15 tool calls) the agent reviews and saves |
+| ⚡ **Background Learning** | Reviews every 10 turns, 15 tool calls, **or after 2 min idle** — with visible trigger/success/failure notifications |
 | 🔧 **Correction Detection** | When you correct the agent, it saves immediately |
 | 🔄 **Auto-Consolidation** | When memory hits capacity, auto-merges instead of erroring |
 | 🛡️ **Secret Scanning** | API keys, tokens, SSH keys blocked from persistence |
@@ -93,7 +96,7 @@ The extension manages three types of knowledge:
 |---|---|---|---|
 | **Memory** (MEMORY.md) | Facts — env details, project conventions, tool quirks | 5,000 chars max | Searchable by default |
 | **User Profile** (USER.md) | Who you are — name, preferences, communication style | 5,000 chars max | Searchable by default |
-| **Skills** (OMP-native `SKILL.md`) | Procedures — *how* to do something, reusable across sessions | Unlimited | Discoverable by OMP + manageable via the skill tool |
+| **Skills** (OMP-native `SKILL.md`) | Procedures — *how* to do something, reusable across sessions | Unlimited | Discoverable by OMP + manageable via the `skill_manage` tool |
 
 ![Memory + Skills Architecture](docs/images/memory-architecture.svg)
 
@@ -106,19 +109,19 @@ Every write — memory and skills — passes through a scanner before being acce
 ## Installation
 
 ```bash
-omp plugin add npm:omp-hermes-memory
+omp plugin install github:troyliu0105/omp-hermes-memory
 ```
 
 Or link a local checkout during development:
 
 ```bash
-omp plugin link /path/to/pi-hermes-memory
+omp plugin link /path/to/omp-hermes-memory
 ```
 
 Or test a single extension file directly:
 
 ```bash
-omp -e /path/to/pi-hermes-memory/src/index.ts -p "/memory-preview-context"
+omp -e /path/to/omp-hermes-memory/src/index.ts -p "/memory-preview-context"
 ```
 
 ## Two-Tier Memory Architecture
@@ -183,7 +186,7 @@ Memory blocks are wrapped in `<memory-context>` XML tags with a guard note ("NOT
 
 ## Usage
 
-Once installed, the extension works automatically for durable memory. Skills are available through the `skill` tool during normal work when the agent decides a reusable procedure is worth saving.
+Once installed, the extension works automatically for durable memory. Skills are available through the `skill_manage` tool during normal work when the agent decides a reusable procedure is worth saving.
 
 ### The `memory` Tool
 
@@ -195,9 +198,9 @@ The agent gets a `memory` tool it can call proactively:
 | `replace` | `memory` or `user` | Update an existing entry (matched by substring) |
 | `remove` | `memory` or `user` | Delete an entry (matched by substring) |
 
-### The `skill` Tool
+### The `skill_manage` Tool
 
-The agent also gets a `skill` tool for saving reusable procedures:
+The agent also gets a `skill_manage` tool for saving reusable procedures. The explicit name is intentional: it manages saved procedures and avoids being mistaken for a generic skill-discovery tool.
 
 | Action | What it does |
 |---|---|
@@ -217,7 +220,7 @@ New skills must choose scope explicitly:
 - `global` for transferable procedures
 - `project` for repo-specific workflows tied to local paths, scripts, architecture, deploy steps, or conventions
 
-The agent should use the skill tool inline during normal work, not via a background auto-extraction pass. That keeps skill creation deliberate and lets the active model choose whether to create, patch, update, or skip.
+The agent should use the `skill_manage` tool inline during normal work, not via a background auto-extraction pass. That keeps skill creation deliberate and lets the active model choose whether to create, patch, update, or skip.
 
 For `create` and `update`, the preferred shape is structured input instead of hand-written markdown:
 
@@ -332,9 +335,9 @@ When you correct the agent, it saves immediately — no waiting for the backgrou
 
 ### Auto-Consolidation
 
-When memory or user profile hits its character limit, the extension automatically consolidates instead of returning an error:
+When memory, user profile, or failure memory hits its character limit, the extension automatically consolidates instead of returning an error:
 
-1. Spawns a one-shot `pi.exec()` process with a consolidation prompt
+1. Spawns a one-shot `omp.exec()` process with a consolidation prompt
 2. The child agent merges related entries, removes outdated ones, keeps the most important facts
 3. Parent reloads from disk and retries the original save
 4. If consolidation fails, falls back to the original error
@@ -472,7 +475,7 @@ Create `~/.omp/agent/hermes-memory-config.json`:
 | `nudgeToolCalls` | `15` | Tool calls between auto-reviews (OR with turns) |
 | `reviewRecentMessages` | `0` | Recent messages included in background review (`0` = all) |
 | `reviewEnabled` | `true` | Enable/disable background learning loop |
-| `memoryOverflowStrategy` | `auto-consolidate` | Behavior when MEMORY.md, USER.md, or project-scoped memory reaches its character limit: `auto-consolidate` runs the existing consolidation flow; `reject` returns an error; `fifo-evict` rotates older entries in file order until the new entry fits |
+| `memoryOverflowStrategy` | `auto-consolidate` | Behavior when MEMORY.md, USER.md, failures.md, or project-scoped memory reaches its character limit: `auto-consolidate` runs the existing consolidation flow; `reject` returns an error; `fifo-evict` rotates older entries in file order until the new entry fits |
 | `autoConsolidate` | `true` | Legacy alias for `memoryOverflowStrategy` when `memoryOverflowStrategy` is not set (`true` = `auto-consolidate`, `false` = `reject`) |
 | `consolidationTimeoutMs` | `60000` | Maximum time in milliseconds for auto-consolidation to complete |
 | `correctionDetection` | `true` | Detect user corrections and save immediately |
@@ -530,7 +533,7 @@ The `sessions.db` SQLite database stores session history and extended memory ent
 - **System prompts are invisible**: OMP's TUI does not display the system prompt. Use `/memory-preview-context` to inspect whether policy-only or legacy memory injection is active.
 - **Project skill visibility depends on OMP discovery cycles**: project skills are exposed through `resources_discover` using the active project's `skills/` path. If a moved or newly created project skill doesn't show up immediately in a running session, trigger a reload/new session so OMP refreshes discovered resources.
 - **Project move requires active project context**: in `/memory-skills`, the `p` hotkey is disabled when OMP is not currently in a detected project directory.
-- **Skills still need curation**: Skills are saved by the agent through the `skill` tool when it decides a reusable procedure is worth keeping. They may still need review. You can move, delete, or edit them directly in `~/.omp/agent/omp-hermes-memory/skills/` or the active project's `skills/` folder.
+- **Skills still need curation**: Skills are saved by the agent through the `skill_manage` tool when it decides a reusable procedure is worth keeping. They may still need review. You can move, delete, or edit them directly in `~/.omp/agent/omp-hermes-memory/skills/` or the active project's `skills/` folder.
 
 ## Architecture
 

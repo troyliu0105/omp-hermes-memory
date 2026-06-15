@@ -76,6 +76,8 @@ export interface MemoryConfig {
   nudgeToolCalls: number;
   /** Maximum time in milliseconds for auto-consolidation to complete. Default: 60000 */
   consolidationTimeoutMs: number;
+  /** Idle milliseconds before triggering background review (0 = disabled). Default: 120000 */
+  idleReviewMs?: number;
 }
 
 export type MemoryCategory =

@@ -2,9 +2,26 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { DEFAULT_PROJECTS_MEMORY_DIR } from "./constants.js";
 
-export const AGENT_ROOT = path.join(os.homedir(), ".omp", "agent");
+/**
+ * Resolve the agent config directory, honoring the same environment variables
+ * OMP's own `pi-utils/dirs.ts` uses:
+ *   - PI_CODING_AGENT_DIR: override the entire agent directory
+ *   - PI_CONFIG_DIR: override the config dir name (default ".omp")
+ * This is the OMP equivalent of the Pi-era PI_CODING_AGENT_DIR-only resolver.
+ */
+export function resolveAgentRoot(env: Record<string, string | undefined> = process.env): string {
+  const agentOverride = env.PI_CODING_AGENT_DIR?.trim();
+  if (agentOverride) return path.resolve(expandHome(agentOverride));
+  const configDirName = env.PI_CONFIG_DIR?.trim() || ".omp";
+  return path.join(os.homedir(), configDirName, "agent");
+}
+
+export const AGENT_ROOT = resolveAgentRoot();
 export const HERMES_MEMORY_DIR_NAME = "omp-hermes-memory";
-export const OMP_CONFIG_PATH = path.join(AGENT_ROOT, "hermes-memory-config.json");
+/** Primary config path: lives inside the extension's own storage directory. */
+export const OMP_CONFIG_PATH = path.join(AGENT_ROOT, HERMES_MEMORY_DIR_NAME, "omp-hermes-memory.json");
+/** Legacy config path (pre-v0.8): read for backward compatibility, never written. */
+export const OMP_CONFIG_PATH_LEGACY = path.join(AGENT_ROOT, "hermes-memory-config.json");
 export const OMP_SESSIONS_DIR = path.join(AGENT_ROOT, "sessions");
 
 export function expandHome(input: string): string {
