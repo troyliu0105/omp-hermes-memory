@@ -1,6 +1,6 @@
 /**
  * Unit tests for correction detection — isCorrection() pattern matching
- * and handler behavior (rate limiting, pi.exec trigger).
+ * and handler behavior (rate limiting, triggering, failure memory save).
  */
 
 import { describe, it, beforeEach, afterEach } from "node:test";
@@ -11,7 +11,10 @@ import path from "node:path";
 import { DatabaseManager } from "../../src/store/db.js";
 import { getMemories } from "../../src/store/sqlite-memory-store.js";
 import { isCorrection, setupCorrectionDetector } from "../../src/handlers/correction-detector.js";
+import { MemoryUpdateGate } from "../../src/handlers/memory-update-gate.js";
 
+
+let updateGate: MemoryUpdateGate;
 // ─── Pattern matching tests ───
 
 describe("isCorrection", () => {
@@ -216,35 +219,42 @@ describe("isCorrection", () => {
   });
 });
 
+function registerCorrectionDetector(
+  pi: Parameters<typeof setupCorrectionDetector>[0],
+  store: Parameters<typeof setupCorrectionDetector>[1],
+  projectStore: Parameters<typeof setupCorrectionDetector>[2],
+  config: Parameters<typeof setupCorrectionDetector>[3],
+  dbManager?: Parameters<typeof setupCorrectionDetector>[5],
+  projectName?: Parameters<typeof setupCorrectionDetector>[6],
+) {
+  setupCorrectionDetector(pi, store, projectStore, config, updateGate, dbManager, projectName);
+}
+
 // ─── Handler behavior tests ───
 
 describe("setupCorrectionDetector handler", () => {
-  let handlers: Record<string, Function[]>;
-  let execCalls: any[];
-  let notifyCalls: any[];
+  let handlers: Record<string, Array<(event: unknown, ctx: unknown) => Promise<void> | void>>;
+  let notifyCalls: Array<{ msg: string; level: string }>;
   let tmpDir: string;
   let dbManager: DatabaseManager;
 
-  function createMockPi(execReturn?: { code: number; stdout: string; stderr: string }) {
-    const ret = execReturn ?? { code: 0, stdout: "Saved correction", stderr: "" };
-    return {
-      on: (event: string, handler: Function) => {
+  function createMockPi() {
+    const pi = {
+      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void> | void) => {
         handlers[event] = handlers[event] || [];
         handlers[event].push(handler);
       },
-      exec: async (...args: any[]) => {
-        execCalls.push(args);
-        return ret;
-      },
       registerTool: () => {},
       registerCommand: () => {},
-    } as any;
+    };
+    assert.ok(!("exec" in pi), "mock pi must not have exec");
+    return pi as unknown as import("@oh-my-pi/pi-coding-agent/extensibility/extensions/types").ExtensionAPI;
   }
 
   const mockStore = {
     getMemoryEntries: () => ["existing entry"],
     getUserEntries: () => [],
-  } as any;
+  } as unknown as import("../../src/store/memory-store.js").MemoryStore;
 
   const config = {
     correctionDetection: true,
@@ -258,16 +268,21 @@ describe("setupCorrectionDetector handler", () => {
     flushMinTurns: 6,
     autoConsolidate: false,
     nudgeToolCalls: 15,
-  };
+  } as unknown as import("../../src/types.js").MemoryConfig;
 
-  function makeCtx(branch: any[] = []) {
+  function makeCtx(branch: unknown[] = []) {
     return {
       sessionManager: { getBranch: () => branch },
-      signal: undefined as any,
+      signal: undefined,
       ui: {
         notify: (msg: string, level: string) => {
           notifyCalls.push({ msg, level });
         },
+      },
+      model: undefined,
+      modelRegistry: {
+        getApiKey: async () => undefined,
+        getAll: () => [],
       },
     };
   }
@@ -275,12 +290,13 @@ describe("setupCorrectionDetector handler", () => {
   function fireMessageEnd(role: string, text: string) {
     const h = handlers["message_end"];
     if (!h) throw new Error("No message_end handler registered");
+    const ctx = makeCtx();
     for (const fn of h) {
-      fn({ message: { role, content: [{ type: "text", text }] } }, makeCtx());
+      fn({ message: { role, content: [{ type: "text", text }] } }, ctx);
     }
   }
 
-  function fireTurnEnd(branch: any[] = []) {
+  function fireTurnEnd(branch: unknown[] = []) {
     const h = handlers["turn_end"];
     if (!h) throw new Error("No turn_end handler registered");
     const ctx = makeCtx(branch);
@@ -290,16 +306,16 @@ describe("setupCorrectionDetector handler", () => {
     return ctx;
   }
 
-  async function settle(ms = 10) {
-    await new Promise((r) => setTimeout(r, ms));
+  function flushMicrotasks(): Promise<void> {
+    return Promise.resolve().then(() => Promise.resolve());
   }
 
   beforeEach(() => {
     handlers = {};
-    execCalls = [];
     notifyCalls = [];
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "correction-detector-test-"));
     dbManager = new DatabaseManager(tmpDir);
+    updateGate = new MemoryUpdateGate();
   });
 
   afterEach(() => {
@@ -307,9 +323,25 @@ describe("setupCorrectionDetector handler", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("triggers pi.exec when correction detected", async () => {
+  it("does not register handlers when correctionDetection is false", () => {
     const pi = createMockPi();
-    setupCorrectionDetector(pi, mockStore, null, config);
+    const disabledConfig = { ...config, correctionDetection: false };
+    registerCorrectionDetector(pi, mockStore, null, disabledConfig);
+
+    assert.strictEqual(Object.keys(handlers).length, 0, "no handlers should be registered when disabled");
+  });
+
+  it("registers message_end and turn_end handlers when enabled", () => {
+    const pi = createMockPi();
+    registerCorrectionDetector(pi, mockStore, null, config);
+
+    assert.ok(handlers["message_end"], "message_end handler should be registered");
+    assert.ok(handlers["turn_end"], "turn_end handler should be registered");
+  });
+
+  it("fires the correction review pipeline when a correction is detected", async () => {
+    const pi = createMockPi();
+    registerCorrectionDetector(pi, mockStore, null, config);
 
     const branch = [
       { type: "message", message: { role: "user", content: [{ type: "text", text: "don't do that" }] } },
@@ -318,73 +350,91 @@ describe("setupCorrectionDetector handler", () => {
 
     fireMessageEnd("user", "don't do that");
     fireTurnEnd(branch);
-    await settle();
+    await flushMicrotasks();
 
-    assert.ok(execCalls.length >= 1, "pi.exec should be called on correction");
+    const detectionNotify = notifyCalls.find((c) => c.msg.includes("Correction detected"));
+    assert.ok(detectionNotify, "should notify that a correction was detected");
   });
 
-  it("passes child LLM override args and defaults thinking to off when only a model override is set", async () => {
+  it("does NOT trigger the correction pipeline on normal messages", async () => {
     const pi = createMockPi();
-    setupCorrectionDetector(pi, mockStore, null, {
-      ...config,
-      llmModelOverride: "openrouter/deepseek/deepseek-v4-flash",
-    });
-
-    const branch = [
-      { type: "message", message: { role: "user", content: [{ type: "text", text: "don't do that" }] } },
-      { type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
-    ];
-
-    fireMessageEnd("user", "don't do that");
-    fireTurnEnd(branch);
-    await settle();
-
-    const cmdArgs: string[] = execCalls[0][1];
-    assert.deepStrictEqual(
-      cmdArgs.slice(0, 6),
-      ["-p", "--no-session", "--model", "openrouter/deepseek/deepseek-v4-flash", "--thinking", "off"],
-    );
-  });
-
-  it("does NOT trigger on normal messages", async () => {
-    const pi = createMockPi();
-    setupCorrectionDetector(pi, mockStore, null, config);
+    registerCorrectionDetector(pi, mockStore, null, config);
 
     fireMessageEnd("user", "looks good");
     fireTurnEnd([]);
-    await settle();
+    await flushMicrotasks();
 
-    assert.strictEqual(execCalls.length, 0, "pi.exec should NOT be called for normal messages");
+    const detectionNotify = notifyCalls.find((c) => c.msg.includes("Correction detected"));
+    assert.strictEqual(detectionNotify, undefined, "should NOT notify for normal messages");
   });
 
   it("rate limits: does not trigger on consecutive corrections within 3 turns", async () => {
     const pi = createMockPi();
-    setupCorrectionDetector(pi, mockStore, null, config);
+    registerCorrectionDetector(pi, mockStore, null, config);
 
-    // First correction
     fireMessageEnd("user", "don't do that");
     fireTurnEnd([]);
-    await settle();
+    await flushMicrotasks();
 
-    const firstCallCount = execCalls.length;
-    assert.ok(firstCallCount >= 1, "first correction should trigger");
+    assert.ok(
+      notifyCalls.some((c) => c.msg.includes("Correction detected")),
+      "first correction should trigger detection",
+    );
 
-    // Second correction within 3 turns — should be rate-limited
+    notifyCalls = [];
     fireMessageEnd("user", "not like that");
     fireTurnEnd([]);
-    await settle();
+    await flushMicrotasks();
 
-    assert.strictEqual(execCalls.length, firstCallCount, "second correction should be rate-limited");
+    assert.strictEqual(notifyCalls.length, 0, "second correction should be rate-limited");
   });
 
-  it("syncs direct correction saves into SQLite", async () => {
+  it("rate limits: triggers again after 3 turns have elapsed", async () => {
     const pi = createMockPi();
-    const correctionStore = {
-      ...mockStore,
-      addFailure: async () => ({ success: true, target: 'failure', entry_count: 1, message: 'Failure memory saved: correction' }),
-    } as any;
+    registerCorrectionDetector(pi, mockStore, null, config);
 
-    setupCorrectionDetector(pi, correctionStore, null, config, dbManager);
+    fireMessageEnd("user", "don't do that");
+    fireTurnEnd([]);
+    await flushMicrotasks();
+    assert.ok(notifyCalls.some((c) => c.msg.includes("Correction detected")));
+
+    notifyCalls = [];
+    fireMessageEnd("user", "ok");
+    fireTurnEnd([]);
+    await flushMicrotasks();
+    fireMessageEnd("user", "ok");
+    fireTurnEnd([]);
+    await flushMicrotasks();
+    fireMessageEnd("user", "ok");
+    fireTurnEnd([]);
+    await flushMicrotasks();
+
+    notifyCalls = [];
+    fireMessageEnd("user", "not like that");
+    fireTurnEnd([]);
+    await flushMicrotasks();
+
+    assert.ok(
+      notifyCalls.some((c) => c.msg.includes("Correction detected")),
+      "correction should trigger again after 3-turn cooldown",
+    );
+  });
+
+  it("saves a failure memory entry when a correction is detected", async () => {
+    const pi = createMockPi();
+    let addFailureCalled = false;
+    let addFailureArgs: { content: string; metadata: unknown } | null = null;
+    const correctionStore = {
+      getMemoryEntries: () => ["existing entry"],
+      getUserEntries: () => [],
+      addFailure: async (content: string, metadata: unknown) => {
+        addFailureCalled = true;
+        addFailureArgs = { content, metadata };
+        return { success: true, target: "failure", entry_count: 1, message: "Failure memory saved: correction" };
+      },
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
+
+    registerCorrectionDetector(pi, correctionStore, null, config, dbManager);
 
     const branch = [
       { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use pnpm instead" }] } },
@@ -393,25 +443,52 @@ describe("setupCorrectionDetector handler", () => {
 
     fireMessageEnd("user", "no, use pnpm instead");
     fireTurnEnd(branch);
-    await settle();
+    await flushMicrotasks();
 
-    const failures = getMemories(dbManager, { target: 'failure' });
+    assert.ok(addFailureCalled, "store.addFailure should be called on correction");
+    assert.ok(addFailureArgs, "addFailure args should be captured");
+    if (!addFailureArgs) throw new Error("Expected addFailure args");
+    assert.match(addFailureArgs.content, /use pnpm instead/);
+  });
+
+  it("syncs the failure memory into SQLite with the correction category", async () => {
+    const pi = createMockPi();
+    const correctionStore = {
+      getMemoryEntries: () => ["existing entry"],
+      getUserEntries: () => [],
+      addFailure: async () => ({ success: true, target: "failure", entry_count: 1, message: "Failure memory saved: correction" }),
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
+
+    registerCorrectionDetector(pi, correctionStore, null, config, dbManager);
+
+    const branch = [
+      { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use pnpm instead" }] } },
+      { type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+    ];
+
+    fireMessageEnd("user", "no, use pnpm instead");
+    fireTurnEnd(branch);
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const failures = getMemories(dbManager, { target: "failure" });
     assert.strictEqual(failures.length, 1);
     assert.match(failures[0].content, /use pnpm instead/);
-    assert.strictEqual(failures[0].category, 'correction');
+    assert.strictEqual(failures[0].category, "correction");
   });
 
   it("syncs project correction saves into SQLite with project scope", async () => {
     const pi = createMockPi();
     const correctionStore = {
-      ...mockStore,
-      addFailure: async () => ({ success: true, target: 'failure', entry_count: 1, message: 'Failure memory saved: correction' }),
-    } as any;
+      getMemoryEntries: () => ["existing entry"],
+      getUserEntries: () => [],
+      addFailure: async () => ({ success: true, target: "failure", entry_count: 1, message: "Failure memory saved: correction" }),
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
     const projectStore = {
-      getMemoryEntries: () => [],
-    } as any;
+      getMemoryEntries: () => ["existing project entry"],
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
 
-    setupCorrectionDetector(pi, correctionStore, projectStore, config, dbManager, 'project-a');
+    registerCorrectionDetector(pi, correctionStore, projectStore, config, dbManager, "project-a");
 
     const branch = [
       { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use pnpm in this repo" }] } },
@@ -420,33 +497,35 @@ describe("setupCorrectionDetector handler", () => {
 
     fireMessageEnd("user", "no, use pnpm in this repo");
     fireTurnEnd(branch);
-    await settle();
+    await flushMicrotasks();
+    await flushMicrotasks();
 
-    const projectFailures = getMemories(dbManager, { target: 'failure', project: 'project-a' });
+    const projectFailures = getMemories(dbManager, { target: "failure", project: "project-a" });
     assert.strictEqual(projectFailures.length, 1);
     assert.match(projectFailures[0].content, /use pnpm in this repo/);
     assert.match(projectFailures[0].content, /Project: project-a/);
-    assert.strictEqual(projectFailures[0].category, 'correction');
+    assert.strictEqual(projectFailures[0].category, "correction");
   });
 
   it("does not break correction handling when SQLite sync fails", async () => {
     const pi = createMockPi();
     let addFailureCalls = 0;
     const correctionStore = {
-      ...mockStore,
+      getMemoryEntries: () => ["existing entry"],
+      getUserEntries: () => [],
       addFailure: async () => {
         addFailureCalls++;
-        return { success: true, target: 'failure', entry_count: 1, message: 'Failure memory saved: correction' };
+        return { success: true, target: "failure", entry_count: 1, message: "Failure memory saved: correction" };
       },
-    } as any;
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
 
     const failingDbManager = {
       getDb: () => {
-        throw new Error('sqlite unavailable');
+        throw new Error("sqlite unavailable");
       },
     } as unknown as DatabaseManager;
 
-    setupCorrectionDetector(pi, correctionStore, null, config, failingDbManager);
+    registerCorrectionDetector(pi, correctionStore, null, config, failingDbManager);
 
     const branch = [
       { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use yarn instead" }] } },
@@ -455,17 +534,12 @@ describe("setupCorrectionDetector handler", () => {
 
     fireMessageEnd("user", "no, use yarn instead");
     fireTurnEnd(branch);
-    await settle();
+    await flushMicrotasks();
 
-    assert.ok(execCalls.length >= 1, 'correction review should still run');
-    assert.strictEqual(addFailureCalls, 1, 'Markdown correction save should still happen');
-  });
-
-  it("does not register handlers when correctionDetection is false", () => {
-    const pi = createMockPi();
-    const disabledConfig = { ...config, correctionDetection: false };
-    setupCorrectionDetector(pi, mockStore, null, disabledConfig);
-
-    assert.strictEqual(Object.keys(handlers).length, 0, "no handlers should be registered when disabled");
+    assert.strictEqual(addFailureCalls, 1, "Markdown correction save should still happen");
+    assert.ok(
+      notifyCalls.some((c) => c.msg.includes("Correction detected")),
+      "correction detection should still run",
+    );
   });
 });

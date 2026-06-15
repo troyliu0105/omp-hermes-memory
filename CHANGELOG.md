@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Failure-memory consolidation** ([#68](https://github.com/chandra447/pi-hermes-memory/issues/68)): `failures.md` now participates in both automatic and manual (`/memory-consolidate`) consolidation. `entriesForTarget()` regained its `failure` branch, `getAllFailureEntries()` was restored on `MemoryStore`, and the command target list includes failure again. Failure memory that exceeded its limit can now be merged down instead of growing unbounded.
+- **In-process memory updates and session serialization**: background review, session flush, correction saves, and consolidation no longer spawn `omp -p` subprocesses. They now call `completeSimple` in-process, emit structured JSON memory operations, and apply them directly to the stores. A new per-session `MemoryUpdateGate` serializes all memory updates so the same session cannot run them in parallel; background reviews skip when the gate is busy, while flush/correction/consolidation queue behind the active update.
 - **Shutdown WAL truncation** ([#75](https://github.com/chandra447/pi-hermes-memory/issues/75)): `dbManager.close()` runs in a `finally` block of the last-registered `session_shutdown` handler so `PRAGMA wal_checkpoint(TRUNCATE)` fires and `sessions.db-wal` stops growing across sessions.
 - **Agent-root env vars** ([#67](https://github.com/chandra447/pi-hermes-memory/issues/67)): `resolveAgentRoot()` honors `PI_CODING_AGENT_DIR` (full override) and `PI_CONFIG_DIR` (config dir name override, OMP name) instead of hardcoding `~/.omp/agent`. Users with custom agent dirs no longer have their data written to the wrong location.
 
@@ -25,11 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ported the plugin to Oh My Pi as `omp-hermes-memory`: package metadata now uses an OMP manifest and `@oh-my-pi/*` dependencies, child background tasks run through `omp`, and OMP command loading works via `omp -e` / `omp plugin link`.
 - Kept the `pi-hermes-memory` config and file formats, but moved the active OMP roots to `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json`, `~/.omp/agent/omp-hermes-memory/`, `~/.omp/agent/projects-memory/<project>/`, and `~/.omp/agent/sessions/`. The global storage leaf is renamed from `pi-hermes-memory` to `omp-hermes-memory` to match the package name.
 
+- Memory update prompts now use structured JSON output instead of asking a child agent to call the `memory` tool. This removes orphaned update processes after OMP exit and keeps all memory mutations inside the live session process.
 ### Tests
 
-- Verified with `npm run check`.
-- Verified targeted Node tests for config loading, child-process args, auto-consolidation, and session flush.
-- Verified targeted Bun tests for resources discovery, markdown backfill, memory-tool registration, and session-search tool behavior.
+- Verified with `npx tsc --noEmit`.
+- Added focused tests for the in-process LLM review pipeline and the per-session memory-update gate.
+- Verified all 34 test files with `bash tests/run-all.sh`.
 
 ## [0.7.13] - 2026-05-27
 

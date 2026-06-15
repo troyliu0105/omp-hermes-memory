@@ -9,16 +9,16 @@
  * Ported from hermes-agent/run_agent.py (_spawn_background_review,
  * _memory_nudge_interval). See PLAN.md → "Hermes Source File Reference Map".
  *
- * Uses pi.exec("omp", ["-p", ...]) for isolated one-shot review,
- * keeping us within OMP's intended extension API.
+ * Uses in-process `completeSimple` from `@oh-my-pi/pi-ai` — no subprocess.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { MemoryStore } from "../store/memory-store.js";
-import { COMBINED_REVIEW_PROMPT } from "../constants.js";
+import { REVIEW_SYSTEM_PROMPT, REVIEW_USER_PROMPT } from "../constants.js";
 import type { MemoryConfig } from "../types.js";
+import { reviewAndApply } from "./llm-review.js";
+import { MemoryUpdateGate } from "./memory-update-gate.js";
 import { applyRecentMessageLimit, collectMessageParts } from "./message-parts.js";
-import { execChildPrompt } from "./pi-child-process.js";
 
 /** Why a review is firing — surfaced in the user-facing notification. */
 type ReviewReason = "turns" | "tool-calls" | "idle";
@@ -31,6 +31,8 @@ interface ReviewContext {
   sessionManager: { getBranch(): unknown[] };
   ui: ExtensionContext["ui"];
   isIdle?(): boolean;
+  model: ExtensionContext["model"];
+  modelRegistry: ExtensionContext["modelRegistry"];
 }
 
 function notify(ctx: ReviewContext, message: string, level: "info" | "warning"): void {
@@ -46,11 +48,14 @@ export function setupBackgroundReview(
   store: MemoryStore,
   projectStore: MemoryStore | null,
   config: MemoryConfig,
+  updateGate: MemoryUpdateGate,
 ): void {
   let turnsSinceReview = 0;
   let toolCallsSinceReview = 0;
   let userTurnCount = 0;
   let reviewInProgress = false;
+  // Abort any in-flight LLM call when the session shuts down.
+  const shutdownAbort = new AbortController();
 
   // Idle timer state. Timer handle type is an allowed exception to the
   // named-type rule (Node timer handles have no exported named type).
@@ -58,9 +63,9 @@ export function setupBackgroundReview(
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
   let lastSeenCtx: ReviewContext | undefined;
 
-  /** Shared review body — builds a conversation snapshot and spawns the child. */
   function runReview(ctx: ReviewContext, reason: ReviewReason): void {
     if (reviewInProgress) return;
+    if (updateGate.isBusy()) return;
     if (userTurnCount < 3) return;
 
     // Build conversation snapshot from session entries (crash-safe)
@@ -90,8 +95,8 @@ export function setupBackgroundReview(
     const currentUser = store.getUserEntries().join("\n§\n");
     const currentProject = projectStore ? projectStore.getMemoryEntries().join("\n§\n") : null;
 
-    const reviewPrompt = [
-      COMBINED_REVIEW_PROMPT,
+    const userPromptSections = [
+      REVIEW_USER_PROMPT,
       "",
       "--- Current Memory ---",
       currentMemory || "(empty)",
@@ -101,45 +106,40 @@ export function setupBackgroundReview(
     ];
 
     if (currentProject !== null) {
-      reviewPrompt.push(
+      userPromptSections.push(
         "",
         "--- Current Project Memory ---",
         currentProject || "(empty)",
       );
     }
 
-    reviewPrompt.push(
+    userPromptSections.push(
       "",
       "--- Conversation to Review ---",
       parts.join("\n\n"),
     );
 
-    // Fire-and-forget: do NOT await. The review runs in a subprocess;
-    // blocking turn_end would freeze the interactive chat.
-    // Notifications are delivered via .then() once the subprocess completes.
-    //
-    // We intentionally omit ctx.signal — the signal is tied to the turn
-    // lifetime and would abort the subprocess before it finishes now that
-    // we're not awaiting. The timeout (120s) provides its own safety net.
-    execChildPrompt(pi, reviewPrompt.join("\n"), config, {
-      signal: undefined,
-      timeoutMs: 120000,
+    updateGate.runIfIdle(async () => {
+      return reviewAndApply(
+        ctx,
+        REVIEW_SYSTEM_PROMPT,
+        userPromptSections.join("\n"),
+        store,
+        projectStore,
+        config,
+        { signal: shutdownAbort.signal, timeoutMs: 120000 },
+      );
     })
       .then((result) => {
         reviewInProgress = false;
-        if (result.code === 0 && result.stdout) {
-          const output = result.stdout.trim();
-          if (output && !output.toLowerCase().includes("nothing to save")) {
-            notify(ctx, "💾 Memory auto-reviewed and updated", "info");
-          }
-        } else if (result.code !== 0) {
-          // Non-zero exit — surface it so the user knows the loop is alive
-          // but hitting a transient failure (model unavailable, etc.).
+        if (!result) return;
+        if (result.error) {
           notify(ctx, "⚠️ Background review failed (will retry next cycle)", "warning");
+        } else if (!result.nothingToSave && result.applied > 0) {
+          notify(ctx, `💾 Memory auto-reviewed and updated (${result.applied} entries saved)`, "info");
         }
       })
       .catch(() => {
-        // Best-effort: subprocess failures (timeout, signal, spawn errors)
         reviewInProgress = false;
         notify(ctx, "⚠️ Background review failed (will retry next cycle)", "warning");
       });
@@ -222,8 +222,9 @@ export function setupBackgroundReview(
     runReview(reviewCtx, reason);
   });
 
-  // Clean up the timer if the session is shutting down.
+  // Clean up on shutdown: clear idle timer and abort any in-flight LLM call.
   pi.on("session_shutdown", async () => {
     clearIdleTimer();
+    shutdownAbort.abort();
   });
 }

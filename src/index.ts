@@ -45,6 +45,7 @@ import { registerIndexSessionsCommand } from "./handlers/index-sessions.js";
 import { registerLearnMemoryCommand } from "./handlers/learn-memory.js";
 import { registerSyncMarkdownMemoriesCommand, syncMarkdownMemoriesToSqlite } from "./handlers/sync-markdown-memories.js";
 import { registerPreviewContextCommand } from "./handlers/preview-context.js";
+import { MemoryUpdateGate } from "./handlers/memory-update-gate.js";
 import { loadConfig } from "./config.js";
 import { detectProject, detectProjectSkills } from "./project.js";
 import { buildPromptContext } from "./prompt-context.js";
@@ -134,6 +135,9 @@ export default function (pi: ExtensionAPI) {
     : { ...config, memoryDir: undefined };
   const projectStore = project.memoryDir ? new MemoryStore(projectConfig) : null;
 
+  // Per-session serialization for all memory updates.
+  const memoryUpdateGate = new MemoryUpdateGate();
+
   // ── 1. Load memory from disk on session start ──
   pi.on("session_start", async (_event, ctx) => {
     if (shouldMigrateExtensionRoot && !extensionRootMigrated) {
@@ -172,25 +176,61 @@ export default function (pi: ExtensionAPI) {
   registerSkillTool(pi, skillStore);
 
   // ── 5. Setup background learning loop (with tool-call-aware nudge) ──
-  setupBackgroundReview(pi, store, projectStore, config);
+  setupBackgroundReview(pi, store, projectStore, config, memoryUpdateGate);
 
   // ── 6. Setup session-end flush ──
-  setupSessionFlush(pi, store, projectStore, config);
+  setupSessionFlush(pi, store, projectStore, config, memoryUpdateGate);
 
   // ── 7. Setup auto-consolidation (inject consolidator into stores) ──
+  // The consolidator runs from within MemoryStore._add(), which is deep inside
+  // event handlers. We capture the latest ExtensionContext via a mutable holder
+  // so the in-process LLM call can resolve model + API key.
+  let latestCtx: import("@oh-my-pi/pi-coding-agent/extensibility/extensions/types").ExtensionContext | null = null;
+  pi.on("turn_end", async (_event, ctx) => { latestCtx = ctx; });
+  pi.on("session_start", async (_event, ctx) => { latestCtx = ctx; });
+  pi.on("session_before_compact", async (_event, ctx) => { latestCtx = ctx; });
+  const ctxProvider = () => latestCtx;
+
   store.setConsolidator(async (target, signal) => {
-    return triggerConsolidation(pi, store, target, signal, config.consolidationTimeoutMs, target, config);
+    return triggerConsolidation(
+      ctxProvider,
+      store,
+      target,
+      memoryUpdateGate,
+      signal,
+      config.consolidationTimeoutMs,
+      target,
+      config,
+    );
   });
   if (projectStore) {
     projectStore.setConsolidator(async (target, signal) => {
       const toolTarget = target === "memory" ? "project" : target;
-      return triggerConsolidation(pi, projectStore, target, signal, config.consolidationTimeoutMs, toolTarget, config);
+      return triggerConsolidation(
+        ctxProvider,
+        projectStore,
+        target,
+        memoryUpdateGate,
+        signal,
+        config.consolidationTimeoutMs,
+        toolTarget,
+        config,
+      );
     });
   }
-  registerConsolidateCommand(pi, store, config.consolidationTimeoutMs, projectStore, projectName, config);
+  registerConsolidateCommand(
+    pi,
+    store,
+    config.consolidationTimeoutMs,
+    projectStore,
+    projectName,
+    config,
+    ctxProvider,
+    memoryUpdateGate,
+  );
 
   // ── 8. Setup correction detection ──
-  setupCorrectionDetector(pi, store, projectStore, config, dbManager, projectName);
+  setupCorrectionDetector(pi, store, projectStore, config, memoryUpdateGate, dbManager, projectName);
 
   // ── 9. Register commands ──
   registerInsightsCommand(pi, store, projectStore, projectName);
