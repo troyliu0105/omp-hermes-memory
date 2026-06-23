@@ -198,6 +198,20 @@ The agent gets a `memory` tool it can call proactively:
 | `replace` | `memory` or `user` | Update an existing entry (matched by substring) |
 | `remove` | `memory` or `user` | Delete an entry (matched by substring) |
 
+### The `memory_list` Tool
+
+The agent also gets a `memory_list` tool for exact live inspection of current Markdown-backed memory:
+
+| Target | What it does |
+|---|---|
+| `all` | List all current memory, user, project, and failure entries |
+| `memory` | List current global memory entries |
+| `user` | List current user-profile entries |
+| `project` | List current project memory entries when an active project is detected |
+| `failure` | List current failure/correction/insight entries |
+
+`memory_list` reads the live in-session stores exactly; use `memory_search` when you want keyword search across the SQLite mirror/store.
+
 ### The `skill_manage` Tool
 
 The agent also gets a `skill_manage` tool for saving reusable procedures. The explicit name is intentional: it manages saved procedures and avoids being mistaken for a generic skill-discovery tool.
@@ -288,8 +302,9 @@ This lets OMP discover project skills as native skills without copying them into
 By default, the extension indexes your OMP session history into a SQLite database with FTS5 full-text search. The agent can search across all past conversations using the `session_search` tool:
 
 | Tool | What it does |
-|---|---|---|
+|---|---|
 | `session_search` | Search past conversations — "what did we discuss about auth?" |
+| `memory_list` | List current Markdown-backed memory exactly |
 | `memory_search` | Search extended memory store — unlimited capacity, keyword-based |
 
 Search behavior notes:
@@ -311,11 +326,12 @@ The extension keeps Markdown memory as the human-readable source of truth, and m
 
 This means:
 - Fresh `memory` tool writes become searchable immediately
+- `memory_list` shows the current Markdown-backed source-of-truth entries exactly
 - Older Markdown entries can be backfilled with `/memory-sync-markdown`
 - SQLite search does **not** replace the core Markdown limit
 
 This is the **hybrid memory architecture**:
-- **Core memory** (MEMORY.md/USER.md/failures.md): Human-readable, size-limited, searchable by default
+- **Core memory** (MEMORY.md/USER.md/failures.md): Human-readable, size-limited, listed exactly by `memory_list`
 - **SQLite memory mirror/store** (`sessions.db`): Searchable on demand via `memory_search`
 
 Important: if core Markdown memory is full and consolidation cannot free space, the write still fails. This package does **not** silently spill failed core-memory writes into SQLite-only storage.

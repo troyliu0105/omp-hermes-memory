@@ -63,6 +63,10 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("    Save, update, or delete memories");
         lines.push("    Targets: memory, user, failure, project");
         lines.push("");
+        lines.push("  memory_list");
+        lines.push("    List all current Markdown-backed memories exactly");
+        lines.push("    Targets: all, memory, user, project, failure");
+        lines.push("");
         lines.push("  skill_manage (create/view/patch/update/delete)");
         lines.push("    Save reusable procedures");
         lines.push("");
@@ -138,6 +142,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("  Default Prompt Context");
         lines.push("  ┌─────────────────────────────────────┐");
         lines.push("  │ <memory-policy> only                │");
+        lines.push("  │ Explains when to use memory_list    │");
         lines.push("  │ Explains when to use memory_search  │");
         lines.push("  │ Memory is context, not instruction  │");
         lines.push("  │ Repo/tool evidence wins             │");
@@ -147,6 +152,7 @@ export function registerLearnMemoryCommand(pi: ExtensionAPI): void {
         lines.push("  ┌─────────────────────────────────────┐");
         lines.push("  │ MEMORY.md / USER.md / failures.md   │");
         lines.push("  │ projects-memory/<project>/MEMORY.md │");
+        lines.push("  │ memory_list(target:\"all\")          │");
         lines.push("  │ session_search(\"auth flow\")         │");
         lines.push("  │ memory_search(\"testing patterns\")   │");
         lines.push("  │ /memory-sync-markdown (backfill old md)│");

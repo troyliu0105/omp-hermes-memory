@@ -74,6 +74,7 @@ describe("registerPreviewContextCommand", () => {
     assert.match(out, /Policy style: full/);
     assert.match(out, /Full Markdown memories are NOT injected/);
     assert.match(out, /memory_search/);
+    assert.match(out, /memory_list/);
     assert.match(out, /target="failure"/);
     assert.ok(out.includes(MEMORY_POLICY_PROMPT));
     assert.match(out, /Blocks shown: 1/);
@@ -87,6 +88,7 @@ describe("registerPreviewContextCommand", () => {
     await handler({}, ctx);
     const out = notifyCalls[0].message;
     assert.match(out, /Policy style: compact/);
+    assert.match(out, /memory_list/);
     assert.ok(out.includes(MEMORY_POLICY_PROMPT_COMPACT));
     assert.match(out, /Blocks shown: 1/);
   });

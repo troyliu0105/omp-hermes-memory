@@ -22,6 +22,7 @@ describe("buildPromptContext", () => {
 
     assert.strictEqual(result, MEMORY_POLICY_PROMPT);
     assert.match(result, /memory_search/);
+    assert.match(result, /memory_list/);
     assert.match(result, /Accepted memory categories/);
     assert.match(result, /category filters categorized failure\/lesson memories only/);
     assert.match(result, /Use category only for categorized failure\/lesson searches/);
@@ -57,6 +58,7 @@ describe("buildPromptContext", () => {
     );
 
     assert.strictEqual(result, MEMORY_POLICY_PROMPT_COMPACT);
+    assert.match(result, /memory_list/);
     assert.match(result, /category filters categorized failure\/lesson memories only/);
     assert.match(result, /scope is required: global for transferable workflows, project for repo-specific ones/);
     assert.match(result, /Do not use memory_search for generic questions/);

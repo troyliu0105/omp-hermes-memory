@@ -31,6 +31,7 @@ import { DatabaseManager } from "./store/db.js";
 import { indexSession } from "./store/session-indexer.js";
 import { parseSessionFile } from "./store/session-parser.js";
 import { registerMemoryTool } from "./tools/memory-tool.js";
+import { registerMemoryListTool } from "./tools/memory-list-tool.js";
 import { registerSkillTool } from "./tools/skill-tool.js";
 import { registerSessionSearchTool } from "./tools/session-search-tool.js";
 import { registerMemorySearchTool } from "./tools/memory-search-tool.js";
@@ -184,6 +185,7 @@ export default function (pi: ExtensionAPI) {
 
   // ── 3. Register the memory tool (with project store + SQLite sync) ──
   registerMemoryTool(pi, store, projectStore, dbManager, projectName);
+  registerMemoryListTool(pi, store, projectStore, projectName);
 
   // ── 4. Register the skill tool ──
   registerSkillTool(pi, skillStore);
