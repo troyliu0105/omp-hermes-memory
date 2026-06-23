@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-06-23
+
+### Fixed
+
+- **Multi-device memory freshness**: the `memory` and `memory_list` tools now re-read the target scope from the backing object store before operating, so changes made on another device during the same session are reflected immediately. The frozen-snapshot injection path (system prompt) is unaffected — Pi's prompt cache is only invalidated when a memory tool is actually invoked. A new `MemoryStore.refreshTargets(scopes)` performs the scoped reload + snapshot rebuild.
+- **Scope-labeled conflict errors**: when an optimistic-lock conflict exhausts the single retry, the error now names the affected scope (e.g. `Memory (MEMORY.md)`) and tells the caller to re-run the operation, instead of a generic message.
+
+### Changed
+
+- `loadFromDisk()` now delegates to `refreshTargets()` for its reload path; the private snapshot-rebuild logic is extracted into `rebuildSnapshot()`.
+
+### Tests
+
+- Added 3 multi-device refresh tests: remote change visibility, version-sync after refresh, and scope isolation.
+- Updated the conflict-exhaustion test to assert the scope-labeled message for both `MEMORY.md` and `USER.md` scopes.
+
+## [0.8.3] - 2026-06-23
+
+### Fixed
+
+- **Project consolidation routing**: `/memory-consolidate` with a project target now routes to the project store's consolidator instead of the global store.
+
+## [0.8.2] - 2026-06-23
+
+### Changed
+
+- Version bump for the `memory_list` tool release.
+
 ## [0.8.1] - 2026-06-23
 
 ### Fixed

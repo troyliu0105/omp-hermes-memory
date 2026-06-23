@@ -93,6 +93,22 @@ export function registerMemoryListTool(
           details: errorResult,
         };
       }
+      // Multi-device freshness: read the latest state before listing so the
+      // result reflects remote changes made on other devices this session.
+      // Best-effort: failures fall back to the in-session snapshot.
+      const scopes = requestedTarget === "all"
+        ? (["memory", "user", "failure"] as const)
+        : requestedTarget === "project"
+          ? (["memory"] as const)
+          : ([requestedTarget] as const);
+      try {
+        await store.refreshTargets([...scopes]);
+        if (projectStore && (requestedTarget === "all" || requestedTarget === "project")) {
+          await projectStore.refreshTargets(["memory"]);
+        }
+      } catch {
+        // Ignore — list from in-session snapshot.
+      }
 
       // Gather blocks for the requested target(s).
       const blocks: MemoryListBlock[] = [];

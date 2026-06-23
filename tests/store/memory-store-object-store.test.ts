@@ -174,16 +174,29 @@ describe("MemoryStore object-store integration", () => {
     assert.ok(persisted.includes(ENTRY_DELIMITER));
   });
 
-  it("second conflict returns the exact user-visible conflict error", async () => {
-    const store = new MemoryStore(makeConfig(), { objectStore: new AlwaysConflictObjectStore() });
-    await store.loadFromDisk();
-
-    const result = await store.add("memory", "local entry");
-
-    assert.deepEqual(result, {
-      success: false,
-      error: "Memory changed on another device while saving. Re-run the memory operation to apply it to the latest S3 version.",
-    });
+  it("conflict after retry exhaustion returns a scope-labeled, actionable error", async () => {
+    // MEMORY.md scope
+    {
+      const store = new MemoryStore(makeConfig(), { objectStore: new AlwaysConflictObjectStore() });
+      await store.loadFromDisk();
+      const result = await store.add("memory", "local entry");
+      assert.equal(result.success, false);
+      assert.equal(
+        result.error,
+        "Memory (MEMORY.md) was modified on another device while saving. The local copy has been reloaded; re-run this memory operation to apply your change against the latest version.",
+      );
+    }
+    // USER.md scope — error names the correct scope
+    {
+      const store = new MemoryStore(makeConfig(), { objectStore: new AlwaysConflictObjectStore() });
+      await store.loadFromDisk();
+      const result = await store.add("user", "local user entry");
+      assert.equal(result.success, false);
+      assert.equal(
+        result.error,
+        "User profile (USER.md) was modified on another device while saving. The local copy has been reloaded; re-run this memory operation to apply your change against the latest version.",
+      );
+    }
   });
 
   it("non-conflict write failures still reject", async () => {
@@ -200,5 +213,68 @@ describe("MemoryStore object-store integration", () => {
     await store.loadFromDisk();
 
     await assert.rejects(() => store.add("memory", "local entry"), /disk full/);
+  });
+
+  it("refreshTargets picks up remote changes made after session load", async () => {
+    const storeBackend = new InMemoryObjectStore({
+      "MEMORY.md": "original <!-- created=2026-06-23, last=2026-06-23 -->",
+    });
+    const store = new MemoryStore(makeConfig(), { objectStore: storeBackend });
+    await store.loadFromDisk();
+    assert.deepEqual(store.getMemoryEntries(), ["original"]);
+
+    // Simulate another device writing to the remote store.
+    storeBackend.seed("MEMORY.md", "peer-added <!-- created=2026-06-23, last=2026-06-23 -->");
+
+    // Before refresh, the in-memory snapshot is frozen.
+    assert.deepEqual(store.getMemoryEntries(), ["original"]);
+    assert.ok(!store.formatForSystemPrompt().includes("peer-added"));
+
+    // After refresh, the snapshot reflects the remote change.
+    await store.refreshTargets(["memory"]);
+    assert.deepEqual(store.getMemoryEntries(), ["peer-added"]);
+    assert.ok(store.formatForSystemPrompt().includes("peer-added"));
+    assert.ok(!store.formatForSystemPrompt().includes("original"));
+  });
+
+  it("refreshTargets keeps version in sync so the next write uses optimistic locking", async () => {
+    const storeBackend = new InMemoryObjectStore({
+      "USER.md": "first <!-- created=2026-06-23, last=2026-06-23 -->",
+    });
+    const store = new MemoryStore(makeConfig(), { objectStore: storeBackend });
+    await store.loadFromDisk();
+
+    // Remote changes while this session is idle.
+    storeBackend.seed("USER.md", "remote <!-- created=2026-06-23, last=2026-06-23 -->");
+
+    await store.refreshTargets(["user"]);
+
+    // The add should succeed without conflict because the version is current.
+    const result = await store.add("user", "local user entry");
+    assert.ok(result.success, `expected success but got: ${JSON.stringify(result)}`);
+    const persisted = storeBackend.get("USER.md") ?? "";
+    assert.ok(persisted.includes("remote"));
+    assert.ok(persisted.includes("local user entry"));
+  });
+
+  it("refreshTargets is scoped — refreshing memory does not touch user scope", async () => {
+    const storeBackend = new InMemoryObjectStore({
+      "MEMORY.md": "mem-a <!-- created=2026-06-23, last=2026-06-23 -->",
+      "USER.md": "user-a <!-- created=2026-06-23, last=2026-06-23 -->",
+    });
+    const store = new MemoryStore(makeConfig(), { objectStore: storeBackend });
+    await store.loadFromDisk();
+
+    const userReadsBefore = storeBackend.readCalls.filter((k) => k === "USER.md").length;
+
+    // Only refresh the memory scope.
+    storeBackend.seed("MEMORY.md", "mem-b <!-- created=2026-06-23, last=2026-06-23 -->");
+    await store.refreshTargets(["memory"]);
+
+    // USER.md was not re-read during a memory-only refresh.
+    const userReadsAfter = storeBackend.readCalls.filter((k) => k === "USER.md").length;
+    assert.equal(userReadsAfter, userReadsBefore);
+    // Memory scope picked up the new value.
+    assert.deepEqual(store.getMemoryEntries(), ["mem-b"]);
   });
 });

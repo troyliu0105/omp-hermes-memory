@@ -81,6 +81,12 @@ export class MemoryStore {
     return MEMORY_FILE;
   }
 
+  private scopeLabel(target: "memory" | "user" | "failure"): string {
+    if (target === "user") return "User profile (USER.md)";
+    if (target === "failure") return "Failure memory (failures.md)";
+    return "Memory (MEMORY.md)";
+  }
+
   private entriesFor(target: "memory" | "user" | "failure"): string[] {
     if (target === "user") return this.userEntries;
     if (target === "failure") return this.failureEntries;
@@ -109,22 +115,38 @@ export class MemoryStore {
 
   async loadFromDisk(): Promise<void> {
     await this.objectStore.ensureReady?.();
-    await this.reloadTargetFromStore("memory");
-    await this.reloadTargetFromStore("user");
-    await this.reloadTargetFromStore("failure");
+    await this.refreshTargets(["memory", "user", "failure"]);
+    await this.syncReferencedMarkdownFiles();
+  }
 
+  /**
+   * Re-read one or more scopes from the backing object store and rebuild the
+   * in-memory snapshot. Intended for the multi-device read path: call this
+   * right before a memory operation so it acts on the latest remote state.
+   *
+   * Unlike `loadFromDisk`, this does NOT re-sync referenced sidecar files or
+   * call `ensureReady` — those happen once at session start. The frozen-snapshot
+   * injection path (`formatForSystemPrompt`) keeps using the snapshot built here,
+   * so Pi's prompt cache is only invalidated when a memory tool is actually invoked.
+   */
+  async refreshTargets(targets: Array<"memory" | "user" | "failure">): Promise<void> {
+    for (const target of targets) {
+      await this.reloadTargetFromStore(target);
+    }
+    // Dedupe per scope (mirrors loadFromDisk semantics).
     this.memoryEntries = [...new Set(this.memoryEntries)];
     this.userEntries = [...new Set(this.userEntries)];
     this.failureEntries = [...new Set(this.failureEntries)];
+    this.rebuildSnapshot();
+  }
 
+  private rebuildSnapshot(): void {
     const strippedMemory = this.memoryEntries.map((entry) => this.stripMetadata(entry));
     const strippedUser = this.userEntries.map((entry) => this.stripMetadata(entry));
     this.snapshot = {
       memory: this.renderBlock("memory", strippedMemory),
       user: this.renderBlock("user", strippedUser),
     };
-
-    await this.syncReferencedMarkdownFiles();
   }
 
   async add(target: "memory" | "user" | "failure", content: string, signal?: AbortSignal): Promise<MemoryResult> {
@@ -385,7 +407,7 @@ export class MemoryStore {
       if (error instanceof StorageConflictError) {
         return {
           success: false,
-          error: "Memory changed on another device while saving. Re-run the memory operation to apply it to the latest S3 version.",
+          error: `${this.scopeLabel(target)} was modified on another device while saving. The local copy has been reloaded; re-run this memory operation to apply your change against the latest version.`,
         };
       }
       throw error;

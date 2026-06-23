@@ -230,6 +230,15 @@ export function registerMemoryTool(
 
       // After the guard above, activeStore is guaranteed non-null when rawTarget === 'project'
       const store_ = activeStore!;
+      // Multi-device freshness: pull the latest version of the target scope before
+      // acting, so this device operates on current remote state. Best-effort: a
+      // network failure here does not block the operation — the optimistic-lock
+      // conflict retry inside MemoryStore.add/replace/remove still catches races.
+      try {
+        await store_.refreshTargets([target]);
+      } catch {
+        // Ignore — proceed with in-session state; conflict detection handles races.
+      }
 
       let result: MemoryResult;
       let syncWarning: string | null = null;
