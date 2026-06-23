@@ -44,6 +44,8 @@ export async function triggerConsolidation(
   toolTarget: ToolMemoryTarget = target,
   llmConfig: Pick<MemoryConfig, "llmModelOverride" | "llmThinkingOverride"> = {},
   llmCall?: import("./llm-review.js").LlmCallFn,
+  projectStore: MemoryStore | null = null,
+  projectName?: string | null,
 ): Promise<ConsolidationResult> {
   const ctx = ctxProvider();
   if (!ctx) {
@@ -77,7 +79,9 @@ export async function triggerConsolidation(
         return { consolidated: false, error: "LLM returned no consolidation operations." };
       }
 
-      const applyResult = await applyMemoryOperations(store, null, operations);
+      const scopedProjectStore = toolTarget === "project" ? (projectStore ?? store) : null;
+      const scopedProjectName = toolTarget === "project" ? projectName : undefined;
+      const applyResult = await applyMemoryOperations(store, scopedProjectStore, operations, scopedProjectName);
 
       if (applyResult.applied === 0) {
         return {
@@ -170,6 +174,9 @@ export function registerConsolidateCommand(
           manualTimeoutMs,
           item.toolTarget,
           llmConfig,
+          undefined,
+          item.toolTarget === "project" ? item.store : null,
+          item.toolTarget === "project" ? projectName : undefined,
         );
 
         if (result.consolidated) {

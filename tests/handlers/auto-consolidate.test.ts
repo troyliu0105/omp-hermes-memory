@@ -159,6 +159,40 @@ describe("triggerConsolidation", () => {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
+  it("routes project consolidation operations to projectStore", async () => {
+    const { store: globalStore, dir: globalDir } = await createTempStore();
+    const { store: projectStore, dir: projectDir } = await createTempStore();
+    try {
+      await projectStore.add("memory", "repo uses npm");
+      await projectStore.add("memory", "repo uses pnpm");
+
+      const llmCall = createMockLlmCall([
+        { action: "replace", target: "project", match: "repo uses npm", content: "repo uses pnpm" },
+        { action: "remove", target: "project", match: "repo uses pnpm" },
+      ]);
+
+      const result = await triggerConsolidation(
+        noopCtxProvider,
+        projectStore,
+        "memory",
+        updateGate,
+        undefined,
+        60000,
+        "project",
+        {},
+        llmCall,
+        projectStore,
+        "demo-project",
+      );
+
+      assert.strictEqual(result.consolidated, true);
+      assert.deepStrictEqual(globalStore.getMemoryEntries(), []);
+      assert.deepStrictEqual(projectStore.getMemoryEntries(), ["repo uses pnpm"]);
+    } finally {
+      await fs.rm(globalDir, { recursive: true, force: true });
+      await fs.rm(projectDir, { recursive: true, force: true });
+    }
+  });
 
   it("consolidates user profile entries when target is 'user'", async () => {
     const { store, dir } = await createTempStore();

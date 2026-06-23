@@ -230,6 +230,9 @@ export default function (pi: ExtensionAPI) {
         config.consolidationTimeoutMs,
         toolTarget,
         config,
+        undefined,
+        projectStore,
+        projectName,
       );
     });
   }
