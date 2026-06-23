@@ -59,4 +59,22 @@ describe("memory-store-factory", () => {
     }), "/tmp/local-memory", "projects/my-project");
     assert.ok(store instanceof S3MemoryObjectStore);
   });
+
+  it("creates S3MemoryObjectStore for s3 backend with localCache disabled", () => {
+    const store = createMemoryObjectStore(makeConfig({
+      storage: {
+        backend: "s3",
+        s3: {
+          endpoint: "https://s3.example.com",
+          accessKey: "access",
+          secretKey: "secret",
+          bucket: "bucket",
+          path: "root",
+          forcePathStyle: true,
+          localCache: false,
+        },
+      },
+    }), "/tmp/local-memory", "projects/my-project");
+    assert.ok(store instanceof S3MemoryObjectStore);
+  });
 });

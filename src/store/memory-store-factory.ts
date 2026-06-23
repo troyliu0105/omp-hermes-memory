@@ -23,6 +23,9 @@ export function createMemoryObjectStore(config: MemoryConfig, localDir: string, 
     path: joinS3Path(config.storage.s3.path, remotePath),
     region: config.storage.s3.region,
     forcePathStyle: config.storage.s3.forcePathStyle,
-    localCache: new LocalMemoryObjectStore(localDir),
+    // localCache defaults to true (offline fallback). Set false for S3-only.
+    localCache: config.storage.s3.localCache === false
+      ? undefined
+      : new LocalMemoryObjectStore(localDir),
   });
 }

@@ -145,6 +145,7 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
       const path = typeof parsed.storage.s3.path === "string" ? parsed.storage.s3.path.trim() : undefined;
       const region = typeof parsed.storage.s3.region === "string" ? parsed.storage.s3.region.trim() : "";
       const forcePathStyle = parsed.storage.s3.forcePathStyle;
+      const localCache = parsed.storage.s3.local_cache;
 
       if (
         endpoint.length > 0
@@ -163,6 +164,7 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
             path,
             ...(region.length > 0 ? { region } : {}),
             ...(typeof forcePathStyle === "boolean" ? { forcePathStyle } : {}),
+            ...(typeof localCache === "boolean" ? { localCache } : {}),
           },
         };
       }
@@ -205,7 +207,7 @@ function buildDefaultConfigTemplate(): Record<string, unknown> {
     userCharLimit: DEFAULT_CONFIG.userCharLimit,
     projectCharLimit: DEFAULT_CONFIG.projectCharLimit,
     projectsMemoryDir: DEFAULT_CONFIG.projectsMemoryDir,
-    "// storage": "local keeps Markdown on disk. s3 syncs global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket. Generic S3-compatible endpoints default to us-east-1; Cloudflare R2 can use region=auto.",
+    "// storage": "local keeps Markdown on disk. s3 stores global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket. Set storage.s3.local_cache=false for S3-only memory with no local Markdown mirror; leave it true for offline fallback. Generic S3-compatible endpoints default to us-east-1; Cloudflare R2 can use region=auto.",
     storage: DEFAULT_CONFIG.storage,
 
     "// learning-loop": "Background review auto-saves memory every N turns, every N tool calls, or after N ms idle.",

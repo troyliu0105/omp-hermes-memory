@@ -370,7 +370,7 @@ describe("loadConfig", () => {
     assert.strictEqual(config.correctionNegativePatterns, undefined);
     assert.strictEqual(config.correctionDirectiveWords, undefined);
   });
-  it("accepts valid S3 storage config, trims required strings, parses forcePathStyle, and keeps optional region", () => {
+  it("accepts valid S3 storage config, trims required strings, parses forcePathStyle/local_cache, and keeps optional region", () => {
     fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
       storage: {
@@ -383,6 +383,7 @@ describe("loadConfig", () => {
           path: "  omp-hermes-memory  ",
           region: "  us-east-1  ",
           forcePathStyle: false,
+          local_cache: false,
         },
       },
     }));
@@ -398,6 +399,7 @@ describe("loadConfig", () => {
         path: "omp-hermes-memory",
         region: "us-east-1",
         forcePathStyle: false,
+        localCache: false,
       },
     });
   });
@@ -466,6 +468,35 @@ describe("loadConfig", () => {
           bucket: "my-bucket",
           path: "omp-hermes-memory",
           forcePathStyle: "false",
+        },
+      },
+    }));
+
+    const config = loadConfig(TEST_CONFIG_PATH);
+    assert.deepStrictEqual(config.storage, {
+      backend: "s3",
+      s3: {
+        endpoint: "https://s3.example.com",
+        accessKey: "access-key",
+        secretKey: "secret-key",
+        bucket: "my-bucket",
+        path: "omp-hermes-memory",
+      },
+    });
+  });
+
+  it("ignores non-boolean local_cache while keeping an otherwise valid S3 config", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
+      storage: {
+        backend: "s3",
+        s3: {
+          endpoint: "https://s3.example.com",
+          access_key: "access-key",
+          secret_key: "secret-key",
+          bucket: "my-bucket",
+          path: "omp-hermes-memory",
+          local_cache: "false",
         },
       },
     }));

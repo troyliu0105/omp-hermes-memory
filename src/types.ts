@@ -99,6 +99,13 @@ export interface S3MemoryStorageConfig {
   region?: string;
   /** Force path-style addressing. Defaults to true for S3-compatible providers. */
   forcePathStyle?: boolean;
+  /**
+   * Mirror memory Markdown into a local cache directory.
+   * Defaults to true (keeps an offline fallback copy on disk alongside S3).
+   * Set to false for S3-only storage: no local memory files are written, and
+   * remote read/put failures propagate instead of falling back to disk.
+   */
+  localCache?: boolean;
 }
 
 export interface MemoryStorageConfig {

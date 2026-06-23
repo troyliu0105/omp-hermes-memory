@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-06-23
+
+### Fixed
+
+- **Optional S3-only markdown memory**: S3-backed memory storage now supports `storage.s3.local_cache=false` to disable the local Markdown mirror. When disabled, `MEMORY.md`, `USER.md`, `failures.md`, and referenced same-directory Markdown sidecars stay in S3 only instead of being mirrored into `~/.omp/agent/omp-hermes-memory/`.
+
+### Changed
+
+- The S3 storage config template now documents the `local_cache` flag and its tradeoff: keep it enabled for offline fallback, or disable it for strict remote-only memory.
+
+### Tests
+
+- Verified with `npm run check`.
+- Added focused config/factory/S3-store coverage for `local_cache=false` and no-local-fallback behavior.
+
 ## [0.8.0] - 2026-06-23
 
 ### Added

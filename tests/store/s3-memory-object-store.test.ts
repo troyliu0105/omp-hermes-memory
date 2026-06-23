@@ -356,6 +356,43 @@ describe("S3MemoryObjectStore", () => {
     assert.equal(client.calls.length, 0);
   });
 
+  it("reads and writes without local fallback when no local cache is configured", async () => {
+    const successClient = fakeClient((command, callIndex) => {
+      if (callIndex === 0) {
+        assert.ok(command instanceof GetObjectCommand);
+        return { Body: bodyOf("remote memory"), ETag: '"etag-read"' };
+      }
+      assert.ok(command instanceof PutObjectCommand);
+      return { ETag: '"etag-write"' };
+    });
+    const successStore = new S3MemoryObjectStore({
+      endpoint: "https://s3.example.com",
+      accessKey: "access-key",
+      secretKey: "secret-key",
+      bucket: "memory-bucket",
+      path: "base/global",
+    }, successClient);
+
+    const readResult = await successStore.readText("MEMORY.md");
+    assert.deepStrictEqual(readResult, { content: "remote memory", version: '"etag-read"' });
+
+    const writeVersion = await successStore.writeText("y_memory.md", "detail text");
+    assert.equal(writeVersion, '"etag-write"');
+
+    const deniedClient = fakeClient(() => {
+      throw s3Error("AccessDenied", 403);
+    });
+    const deniedStore = new S3MemoryObjectStore({
+      endpoint: "https://s3.example.com",
+      accessKey: "access-key",
+      secretKey: "secret-key",
+      bucket: "memory-bucket",
+      path: "base/global",
+    }, deniedClient);
+
+    await assert.rejects(() => deniedStore.readText("MEMORY.md"), S3ServiceException);
+  });
+
   it("mirrors successful reads and writes into the local cache", async () => {
     const cacheDir = await makeTempDir("s3-memory-cache-");
     const client = fakeClient((command, callIndex) => {
