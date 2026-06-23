@@ -28,8 +28,23 @@ export interface S3MemoryObjectStoreOptions {
   secretKey: string;
   bucket: string;
   path: string;
+  region?: string;
   forcePathStyle?: boolean;
   localCache?: MemoryObjectStore;
+}
+
+export function resolveS3Region(endpoint: string, region?: string): string {
+  const trimmedRegion = region?.trim();
+  if (trimmedRegion) return trimmedRegion;
+
+  let hostname = "";
+  try {
+    hostname = new URL(endpoint).hostname.toLowerCase();
+  } catch {
+    hostname = endpoint.toLowerCase();
+  }
+
+  return hostname.endsWith(".r2.cloudflarestorage.com") ? "auto" : "us-east-1";
 }
 
 function isMissingS3Object(error: unknown): boolean {
@@ -61,7 +76,7 @@ export class S3MemoryObjectStore implements MemoryObjectStore {
 
   constructor(options: S3MemoryObjectStoreOptions, client?: Pick<S3Client, "send">) {
     this.client = client ?? new S3Client({
-      region: "auto",
+      region: resolveS3Region(options.endpoint, options.region),
       endpoint: options.endpoint,
       forcePathStyle: options.forcePathStyle ?? true,
       credentials: {

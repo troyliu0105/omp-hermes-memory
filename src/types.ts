@@ -95,6 +95,8 @@ export interface S3MemoryStorageConfig {
   bucket: string;
   /** Key prefix (may be empty for bucket root). */
   path: string;
+  /** Optional signing region override. Generic S3-compatible endpoints default to us-east-1; Cloudflare R2 may use auto. */
+  region?: string;
   /** Force path-style addressing. Defaults to true for S3-compatible providers. */
   forcePathStyle?: boolean;
 }

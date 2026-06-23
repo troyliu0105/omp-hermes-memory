@@ -471,7 +471,7 @@ Create `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` (the current prim
 | `projectCharLimit` | `5000` | Max characters in project-scoped MEMORY.md |
 | `memoryDir` | `~/.omp/agent/omp-hermes-memory` | Custom directory for extension storage files |
 | `projectsMemoryDir` | `projects-memory` | Subdirectory under `~/.omp/agent/` for project-scoped memory |
-| `storage` | `{ "backend": "local" }` | Set `{ "backend": "s3", "s3": { "endpoint": "https://...", "access_key": "...", "secret_key": "...", "bucket": "...", "path": "omp-hermes-memory" } }` to sync global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket. The plugin passes these credentials directly to the AWS SDK S3 client. |
+| `storage` | `{ "backend": "local" }` | Set `{ "backend": "s3", "s3": { "endpoint": "https://...", "access_key": "...", "secret_key": "...", "bucket": "...", "path": "omp-hermes-memory", "region": "us-east-1" } }` to sync global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket. `region` is optional: generic S3-compatible endpoints default to `us-east-1`, while Cloudflare R2 users can set `"region": "auto"`. The plugin passes these credentials directly to the AWS SDK S3 client. |
 | `sessionSearch` | `{ "variant": "legacy" }` | Session search implementation: `legacy` keeps the existing SQLite/FTS snippet search; `anchors` uses the opt-in Markdown request surface and returns compact JSONL line-range anchors from `~/.omp/agent/sessions/` |
 | `llmModelOverride` | unset | Optional model override for child `omp -p` subprocess calls used by background review, correction save, session flush, and consolidation |
 | `llmThinkingOverride` | unset | Optional thinking override for those child subprocess calls; valid values are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. If `llmModelOverride` is set and this is omitted, child calls default to `off` |
@@ -506,11 +506,14 @@ S3 example:
       "access_key": "<access-key>",
       "secret_key": "<secret-key>",
       "bucket": "my-omp-memory",
-      "path": "omp-hermes-memory"
+      "path": "omp-hermes-memory",
+      "region": "us-east-1"
     }
   }
 }
 ```
+
+For Cloudflare R2, set `"region": "auto"` explicitly if you want to match R2's signing examples. If `region` is omitted, the plugin defaults to `us-east-1` for generic S3-compatible endpoints and to `auto` for `*.r2.cloudflarestorage.com` endpoints.
 
 With S3 enabled, sync covers global `MEMORY.md`, `USER.md`, `failures.md`, the active project's `MEMORY.md`, and safe same-directory referenced `.md` detail files such as `y_memory.md`. Referenced detail files are synchronized for cross-device availability, but they are not injected into the system prompt.
 

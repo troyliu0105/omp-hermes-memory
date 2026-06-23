@@ -370,7 +370,7 @@ describe("loadConfig", () => {
     assert.strictEqual(config.correctionNegativePatterns, undefined);
     assert.strictEqual(config.correctionDirectiveWords, undefined);
   });
-  it("accepts valid S3 storage config, trims required strings, and parses forcePathStyle", () => {
+  it("accepts valid S3 storage config, trims required strings, parses forcePathStyle, and keeps optional region", () => {
     fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
       storage: {
@@ -381,6 +381,7 @@ describe("loadConfig", () => {
           secret_key: "  secret-key  ",
           bucket: "  my-bucket  ",
           path: "  omp-hermes-memory  ",
+          region: "  us-east-1  ",
           forcePathStyle: false,
         },
       },
@@ -395,6 +396,7 @@ describe("loadConfig", () => {
         secretKey: "secret-key",
         bucket: "my-bucket",
         path: "omp-hermes-memory",
+        region: "us-east-1",
         forcePathStyle: false,
       },
     });
@@ -479,6 +481,38 @@ describe("loadConfig", () => {
         path: "omp-hermes-memory",
       },
     });
+  });
+
+  it("ignores blank or non-string region while keeping an otherwise valid S3 config", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+
+    for (const region of ["   ", 123, false, null]) {
+      fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
+        storage: {
+          backend: "s3",
+          s3: {
+            endpoint: "https://s3.example.com",
+            access_key: "access-key",
+            secret_key: "secret-key",
+            bucket: "my-bucket",
+            path: "omp-hermes-memory",
+            region,
+          },
+        },
+      }));
+
+      const config = loadConfig(TEST_CONFIG_PATH);
+      assert.deepStrictEqual(config.storage, {
+        backend: "s3",
+        s3: {
+          endpoint: "https://s3.example.com",
+          accessKey: "access-key",
+          secretKey: "secret-key",
+          bucket: "my-bucket",
+          path: "omp-hermes-memory",
+        },
+      });
+    }
   });
 
   it("rejects blank required S3 strings while allowing blank path", () => {

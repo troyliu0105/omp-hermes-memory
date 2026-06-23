@@ -21,6 +21,7 @@ export function createMemoryObjectStore(config: MemoryConfig, localDir: string, 
     secretKey: config.storage.s3.secretKey,
     bucket: config.storage.s3.bucket,
     path: joinS3Path(config.storage.s3.path, remotePath),
+    region: config.storage.s3.region,
     forcePathStyle: config.storage.s3.forcePathStyle,
     localCache: new LocalMemoryObjectStore(localDir),
   });

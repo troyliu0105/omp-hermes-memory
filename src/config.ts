@@ -143,6 +143,7 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
       const secretKey = typeof parsed.storage.s3.secret_key === "string" ? parsed.storage.s3.secret_key.trim() : "";
       const bucket = typeof parsed.storage.s3.bucket === "string" ? parsed.storage.s3.bucket.trim() : "";
       const path = typeof parsed.storage.s3.path === "string" ? parsed.storage.s3.path.trim() : undefined;
+      const region = typeof parsed.storage.s3.region === "string" ? parsed.storage.s3.region.trim() : "";
       const forcePathStyle = parsed.storage.s3.forcePathStyle;
 
       if (
@@ -160,6 +161,7 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
             secretKey,
             bucket,
             path,
+            ...(region.length > 0 ? { region } : {}),
             ...(typeof forcePathStyle === "boolean" ? { forcePathStyle } : {}),
           },
         };
@@ -203,7 +205,7 @@ function buildDefaultConfigTemplate(): Record<string, unknown> {
     userCharLimit: DEFAULT_CONFIG.userCharLimit,
     projectCharLimit: DEFAULT_CONFIG.projectCharLimit,
     projectsMemoryDir: DEFAULT_CONFIG.projectsMemoryDir,
-    "// storage": "local keeps Markdown on disk. s3 syncs global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket.",
+    "// storage": "local keeps Markdown on disk. s3 syncs global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket. Generic S3-compatible endpoints default to us-east-1; Cloudflare R2 can use region=auto.",
     storage: DEFAULT_CONFIG.storage,
 
     "// learning-loop": "Background review auto-saves memory every N turns, every N tool calls, or after N ms idle.",

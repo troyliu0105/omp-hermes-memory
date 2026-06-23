@@ -10,7 +10,7 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { LocalMemoryObjectStore, StorageConflictError, type MemoryObjectStore } from "../../src/store/memory-object-store.js";
-import { S3MemoryObjectStore } from "../../src/store/s3-memory-object-store.js";
+import { S3MemoryObjectStore, resolveS3Region } from "../../src/store/s3-memory-object-store.js";
 
 function bodyOf(content: string) {
   return {
@@ -117,6 +117,26 @@ describe("S3MemoryObjectStore", () => {
       assert.equal(result.content, "details");
       assert.equal(result.version, '"etag-sidecar"');
     }
+  });
+
+  it("defaults generic S3-compatible endpoints to us-east-1", () => {
+    assert.equal(resolveS3Region("https://s3.example.com"), "us-east-1");
+    assert.equal(resolveS3Region("https://wolke.asswecan.org:9443"), "us-east-1");
+  });
+
+  it("defaults Cloudflare R2 endpoints to auto", () => {
+    assert.equal(
+      resolveS3Region("https://example-account.r2.cloudflarestorage.com"),
+      "auto",
+    );
+  });
+
+  it("lets explicit region override endpoint defaults", () => {
+    assert.equal(resolveS3Region("https://s3.example.com", "eu-west-1"), "eu-west-1");
+    assert.equal(
+      resolveS3Region("https://example-account.r2.cloudflarestorage.com", "us-east-1"),
+      "us-east-1",
+    );
   });
 
   it("returns null for missing objects signaled as NoSuchKey, NotFound, or HTTP 404", async () => {
