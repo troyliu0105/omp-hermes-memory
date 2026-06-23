@@ -25,6 +25,7 @@
 import * as path from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { MemoryStore } from "./store/memory-store.js";
+import { createMemoryObjectStore, joinS3Path } from "./store/memory-store-factory.js";
 import { SkillStore } from "./store/skill-store.js";
 import { DatabaseManager } from "./store/db.js";
 import { indexSession } from "./store/session-indexer.js";
@@ -96,7 +97,8 @@ export default function (pi: ExtensionAPI) {
   const shouldMigrateExtensionRoot = !configuredMemoryDir || pointsToLegacyMemoryDir;
   let extensionRootMigrated = false;
 
-  const store = new MemoryStore({ ...config, memoryDir: globalDir });
+  const globalObjectStore = createMemoryObjectStore(config, globalDir, "global");
+  const store = new MemoryStore({ ...config, memoryDir: globalDir }, { objectStore: globalObjectStore });
   const project = detectProject(config.projectsMemoryDir);
   const projectName = project.name ?? "";
   const skillStore = new SkillStore({
@@ -122,18 +124,24 @@ export default function (pi: ExtensionAPI) {
   // ~/.omp/agent/<project>/ layout. This is non-destructive: legacy folders
   // remain in place while entries are copied/merged into projects-memory/.
   migrateLegacyProjectMemoryDirs(agentRoot, config.projectsMemoryDir);
-  try {
-    syncMarkdownMemoriesToSqlite(dbManager, globalDir, config.projectsMemoryDir, agentRoot);
-  } catch {
-    // Best-effort only: failed SQLite backfill should not block extension startup.
-  }
 
   // Detect project from cwd using shared helper
   // Project-scoped store: ~/.omp/agent/<projectsMemoryDir>/<project_name>/
   const projectConfig = project.memoryDir
     ? { ...config, memoryCharLimit: config.projectCharLimit, memoryDir: project.memoryDir }
     : { ...config, memoryDir: undefined };
-  const projectStore = project.memoryDir ? new MemoryStore(projectConfig) : null;
+  const projectStore = project.memoryDir
+    ? new MemoryStore(
+      projectConfig,
+      {
+        objectStore: createMemoryObjectStore(
+          config,
+          project.memoryDir,
+          joinS3Path("projects", encodeURIComponent(projectName)),
+        ),
+      },
+    )
+    : null;
 
   // Per-session serialization for all memory updates.
   const memoryUpdateGate = new MemoryUpdateGate();
@@ -154,6 +162,11 @@ export default function (pi: ExtensionAPI) {
     await skillStore.ensureDiscoveredRoots();
     await store.loadFromDisk();
     if (projectStore) await projectStore.loadFromDisk();
+    try {
+      syncMarkdownMemoriesToSqlite(dbManager, globalDir, config.projectsMemoryDir, agentRoot);
+    } catch {
+      // Best-effort only: failed SQLite backfill should not block extension startup.
+    }
   });
 
   registerProjectSkillDiscoveryHandler(pi, skillStore, config.projectsMemoryDir);

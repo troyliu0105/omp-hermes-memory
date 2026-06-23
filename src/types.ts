@@ -78,6 +78,31 @@ export interface MemoryConfig {
   consolidationTimeoutMs: number;
   /** Idle milliseconds before triggering background review (0 = disabled). Default: 120000 */
   idleReviewMs?: number;
+  /** Durable storage backend. Default: local Markdown files. */
+  storage?: MemoryStorageConfig;
+}
+
+export type MemoryStorageBackend = "local" | "s3";
+
+export interface S3MemoryStorageConfig {
+  /** S3-compatible endpoint URL, e.g. "https://s3.example.com" or R2 "https://<account>.r2.cloudflarestorage.com" */
+  endpoint: string;
+  /** Access key ID passed directly to the AWS SDK S3 client. */
+  accessKey: string;
+  /** Secret access key passed directly to the AWS SDK S3 client. */
+  secretKey: string;
+  /** Bucket name. */
+  bucket: string;
+  /** Key prefix (may be empty for bucket root). */
+  path: string;
+  /** Force path-style addressing. Defaults to true for S3-compatible providers. */
+  forcePathStyle?: boolean;
+}
+
+export interface MemoryStorageConfig {
+  backend: MemoryStorageBackend;
+  /** S3 configuration. Required when backend is "s3". */
+  s3?: S3MemoryStorageConfig;
 }
 
 export type MemoryCategory =

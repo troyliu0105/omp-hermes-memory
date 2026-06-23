@@ -426,7 +426,7 @@ Move behavior:
 
 ## Configuration
 
-Create `~/.omp/agent/hermes-memory-config.json`:
+Create `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` (the current primary path; the legacy `~/.omp/agent/hermes-memory-config.json` path is still read for compatibility):
 
 ```json
 {
@@ -437,6 +437,9 @@ Create `~/.omp/agent/hermes-memory-config.json`:
   "projectCharLimit": 5000,
   "memoryDir": "~/.omp/agent/omp-hermes-memory",
   "projectsMemoryDir": "projects-memory",
+  "storage": {
+    "backend": "local"
+  },
   "sessionSearch": { "variant": "legacy" },
   "llmModelOverride": "openrouter/deepseek/deepseek-v4-flash",
   "llmThinkingOverride": "off",
@@ -468,6 +471,7 @@ Create `~/.omp/agent/hermes-memory-config.json`:
 | `projectCharLimit` | `5000` | Max characters in project-scoped MEMORY.md |
 | `memoryDir` | `~/.omp/agent/omp-hermes-memory` | Custom directory for extension storage files |
 | `projectsMemoryDir` | `projects-memory` | Subdirectory under `~/.omp/agent/` for project-scoped memory |
+| `storage` | `{ "backend": "local" }` | Set `{ "backend": "s3", "s3": { "endpoint": "https://...", "access_key": "...", "secret_key": "...", "bucket": "...", "path": "omp-hermes-memory" } }` to sync global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket. The plugin passes these credentials directly to the AWS SDK S3 client. |
 | `sessionSearch` | `{ "variant": "legacy" }` | Session search implementation: `legacy` keeps the existing SQLite/FTS snippet search; `anchors` uses the opt-in Markdown request surface and returns compact JSONL line-range anchors from `~/.omp/agent/sessions/` |
 | `llmModelOverride` | unset | Optional model override for child `omp -p` subprocess calls used by background review, correction save, session flush, and consolidation |
 | `llmThinkingOverride` | unset | Optional thinking override for those child subprocess calls; valid values are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. If `llmModelOverride` is set and this is omitted, child calls default to `off` |
@@ -491,21 +495,42 @@ Create `~/.omp/agent/hermes-memory-config.json`:
 | `flushMinTurns` | `6` | Minimum turns before flush triggers |
 | `flushRecentMessages` | `0` | Recent messages included in session flush (`0` = all) |
 
+S3 example:
+
+```json
+{
+  "storage": {
+    "backend": "s3",
+    "s3": {
+      "endpoint": "https://s3.example.com",
+      "access_key": "<access-key>",
+      "secret_key": "<secret-key>",
+      "bucket": "my-omp-memory",
+      "path": "omp-hermes-memory"
+    }
+  }
+}
+```
+
+With S3 enabled, sync covers global `MEMORY.md`, `USER.md`, `failures.md`, the active project's `MEMORY.md`, and safe same-directory referenced `.md` detail files such as `y_memory.md`. Referenced detail files are synchronized for cross-device availability, but they are not injected into the system prompt.
+
 ## Where Data Lives
 
 ```
 ~/.omp/agent/
-├── omp-hermes-memory/      ← Global extension storage root
-│   ├── MEMORY.md          ← Agent's personal notes (env facts, patterns, lessons)
-│   ├── USER.md            ← User profile (name, preferences, habits)
-│   ├── sessions.db        ← SQLite database (session history + extended memory)
-│   ├── skills/            ← Global extension-managed skills
+├── omp-hermes-memory/               ← Global extension storage root
+│   ├── MEMORY.md                    ← Agent's personal notes (env facts, patterns, lessons)
+│   ├── USER.md                      ← User profile (name, preferences, habits)
+│   ├── failures.md                  ← Failure memories used by legacy injection / review flows
+│   ├── sessions.db                  ← SQLite database (session history + extended memory); always local
+│   ├── skills/                      ← Global extension-managed skills; always local
 │   │   ├── debug-typescript-errors/
 │   │   │   └── SKILL.md
 │   │   └── testing-checklist/
 │   │       └── SKILL.md
+│   ├── omp-hermes-memory.json       ← Primary config path
 │   └── .skills-migrated-to-extension-storage
-├── projects-memory/       ← ALL project-scoped memories (one subfolder per project)
+├── projects-memory/                 ← ALL project-scoped memories (one subfolder per project)
 │   ├── my-project/
 │   │   ├── MEMORY.md
 │   │   └── skills/
@@ -513,7 +538,7 @@ Create `~/.omp/agent/hermes-memory-config.json`:
 │   │           └── SKILL.md
 │   └── another-project/
 │       └── MEMORY.md
-├── hermes-memory-config.json
+├── hermes-memory-config.json        ← Legacy config path; still readable for compatibility
 └── ...
 ```
 
@@ -521,7 +546,9 @@ These are plain markdown files. You can read and edit them directly if you want 
 
 If you are upgrading from a version that stored project memory directly at `~/.omp/agent/<project>/MEMORY.md`, the extension copies or merges those entries into `~/.omp/agent/projects-memory/<project>/MEMORY.md` on startup. The old folders are left in place as a backup.
 
-The `sessions.db` SQLite database stores session history and extended memory entries. It's searchable via FTS5 full-text search.
+When `storage.backend` is `s3`, the extension syncs global `MEMORY.md`, `USER.md`, `failures.md`, the active project `MEMORY.md`, and safe same-directory referenced Markdown detail files such as `y_memory.md` through the configured S3-compatible bucket/key path. Referenced detail files are synchronized, but their contents are not injected into the system prompt.
+
+The `sessions.db` SQLite database stores session history and extended memory entries. It's searchable via FTS5 full-text search and remains local even when S3-backed memory is enabled. Skills also remain local.
 
 ## Known Limitations
 

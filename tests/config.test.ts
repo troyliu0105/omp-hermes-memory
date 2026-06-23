@@ -370,4 +370,142 @@ describe("loadConfig", () => {
     assert.strictEqual(config.correctionNegativePatterns, undefined);
     assert.strictEqual(config.correctionDirectiveWords, undefined);
   });
+  it("accepts valid S3 storage config, trims required strings, and parses forcePathStyle", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
+      storage: {
+        backend: "s3",
+        s3: {
+          endpoint: "  https://s3.example.com  ",
+          access_key: "  access-key  ",
+          secret_key: "  secret-key  ",
+          bucket: "  my-bucket  ",
+          path: "  omp-hermes-memory  ",
+          forcePathStyle: false,
+        },
+      },
+    }));
+
+    const config = loadConfig(TEST_CONFIG_PATH);
+    assert.deepStrictEqual(config.storage, {
+      backend: "s3",
+      s3: {
+        endpoint: "https://s3.example.com",
+        accessKey: "access-key",
+        secretKey: "secret-key",
+        bucket: "my-bucket",
+        path: "omp-hermes-memory",
+        forcePathStyle: false,
+      },
+    });
+  });
+
+  it("accepts an empty S3 path after trimming", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
+      storage: {
+        backend: "s3",
+        s3: {
+          endpoint: "https://s3.example.com",
+          access_key: "access-key",
+          secret_key: "secret-key",
+          bucket: "my-bucket",
+          path: "   ",
+          forcePathStyle: true,
+        },
+      },
+    }));
+
+    const config = loadConfig(TEST_CONFIG_PATH);
+    assert.deepStrictEqual(config.storage, {
+      backend: "s3",
+      s3: {
+        endpoint: "https://s3.example.com",
+        accessKey: "access-key",
+        secretKey: "secret-key",
+        bucket: "my-bucket",
+        path: "",
+        forcePathStyle: true,
+      },
+    });
+  });
+
+  it("falls back to local storage for invalid or partial S3 config", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+
+    for (const storage of [
+      { backend: "s3" },
+      {
+        backend: "s3",
+        s3: {
+          endpoint: "https://s3.example.com",
+          access_key: "access-key",
+          secret_key: "secret-key",
+          path: "omp-hermes-memory",
+        },
+      },
+      { backend: "invalid" },
+      "s3",
+    ]) {
+      fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ storage }));
+      const config = loadConfig(TEST_CONFIG_PATH);
+      assert.deepStrictEqual(config.storage, { backend: "local" });
+    }
+  });
+  it("ignores non-boolean forcePathStyle while keeping an otherwise valid S3 config", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
+      storage: {
+        backend: "s3",
+        s3: {
+          endpoint: "https://s3.example.com",
+          access_key: "access-key",
+          secret_key: "secret-key",
+          bucket: "my-bucket",
+          path: "omp-hermes-memory",
+          forcePathStyle: "false",
+        },
+      },
+    }));
+
+    const config = loadConfig(TEST_CONFIG_PATH);
+    assert.deepStrictEqual(config.storage, {
+      backend: "s3",
+      s3: {
+        endpoint: "https://s3.example.com",
+        accessKey: "access-key",
+        secretKey: "secret-key",
+        bucket: "my-bucket",
+        path: "omp-hermes-memory",
+      },
+    });
+  });
+
+  it("rejects blank required S3 strings while allowing blank path", () => {
+    fs.mkdirSync(path.dirname(TEST_CONFIG_PATH), { recursive: true });
+
+    for (const [field, value] of Object.entries({
+      endpoint: "   ",
+      access_key: "   ",
+      secret_key: "   ",
+      bucket: "   ",
+    })) {
+      fs.writeFileSync(TEST_CONFIG_PATH, JSON.stringify({
+        storage: {
+          backend: "s3",
+          s3: {
+            endpoint: "https://s3.example.com",
+            access_key: "access-key",
+            secret_key: "secret-key",
+            bucket: "my-bucket",
+            path: "",
+            [field]: value,
+          },
+        },
+      }));
+
+      const config = loadConfig(TEST_CONFIG_PATH);
+      assert.deepStrictEqual(config.storage, { backend: "local" });
+    }
+  });
 });

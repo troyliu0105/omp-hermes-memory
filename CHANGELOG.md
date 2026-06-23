@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-23
+
 ### Added
 
 - **Idle-triggered background review**: a third trigger source alongside turn count and tool-call count. After `idleReviewMs` (default 120000 ms = 2 min) of inactivity, the agent runs a background memory review. Set to `0` to disable. The idle timer is armed on `turn_end`, cancelled on new `message_start`, and cleared on `session_shutdown`.
 - **Auto-generated config file**: on first run, `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` is written atomically with every option (including `llmModelOverride` / `llmThinkingOverride` model fields) and inline documentation. The legacy `~/.omp/agent/hermes-memory-config.json` is still read for backward compatibility.
 - **Observable learning loop**: background review, correction detection, and session flush now emit user-facing notifications at every stage — trigger (`💾 Background review triggered (10 turns)…`), success (`💾 Memory auto-reviewed and updated`), and failure (`⚠️ Background review failed (will retry next cycle)`).
 
+- **S3-backed durable memory storage**: core memory can now sync through an S3-compatible bucket instead of staying device-local. The new `storage` config supports `endpoint`, `access_key`, `secret_key`, `bucket`, and `path`. Global `MEMORY.md`, `USER.md`, `failures.md`, and the active project's `MEMORY.md` now load/write through the configured backend while keeping local Markdown as a cache/search-backfill source.
+- **Referenced Markdown sidecar sync**: memory entries that point to same-directory detail files such as `y_memory.md` now synchronize those files alongside the primary memory object, making pointer-style memories usable across devices without injecting the sidecar contents into the system prompt.
 ### Fixed
 
 - **Failure-memory consolidation** ([#68](https://github.com/chandra447/pi-hermes-memory/issues/68)): `failures.md` now participates in both automatic and manual (`/memory-consolidate`) consolidation. `entriesForTarget()` regained its `failure` branch, `getAllFailureEntries()` was restored on `MemoryStore`, and the command target list includes failure again. Failure memory that exceeded its limit can now be merged down instead of growing unbounded.
@@ -25,13 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`skill` tool renamed to `skill_manage`** ([#66](https://github.com/chandra447/pi-hermes-memory/issues/66)): the procedural-memory tool is now registered as `skill_manage` to make its purpose explicit and avoid being mistaken for a generic skill-discovery tool. Prompt text, help strings, and tests updated.
 - Ported the plugin to Oh My Pi as `omp-hermes-memory`: package metadata now uses an OMP manifest and `@oh-my-pi/*` dependencies, child background tasks run through `omp`, and OMP command loading works via `omp -e` / `omp plugin link`.
 - Kept the `pi-hermes-memory` config and file formats, but moved the active OMP roots to `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json`, `~/.omp/agent/omp-hermes-memory/`, `~/.omp/agent/projects-memory/<project>/`, and `~/.omp/agent/sessions/`. The global storage leaf is renamed from `pi-hermes-memory` to `omp-hermes-memory` to match the package name.
-
+- `MemoryStore` persistence now flows through a pluggable object-store layer with optimistic-concurrency version tracking, single-retry conflict handling, and a new S3/local factory. This preserves the existing public `MemoryStore` API while switching the storage backend under it.
 - Memory update prompts now use structured JSON output instead of asking a child agent to call the `memory` tool. This removes orphaned update processes after OMP exit and keeps all memory mutations inside the live session process.
 ### Tests
 
 - Verified with `npx tsc --noEmit`.
 - Added focused tests for the in-process LLM review pipeline and the per-session memory-update gate.
 - Verified all 34 test files with `bash tests/run-all.sh`.
+- Added focused config, S3 adapter, object-store integration, and factory tests for backend selection, conditional writes, cache mirroring, sidecar synchronization, and cross-device conflict retry behavior.
 
 ## [0.7.13] - 2026-05-27
 

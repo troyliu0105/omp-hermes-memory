@@ -63,6 +63,7 @@ const DEFAULT_CONFIG: MemoryConfig = {
   consolidationTimeoutMs: DEFAULT_CONSOLIDATION_TIMEOUT_MS,
   projectsMemoryDir: DEFAULT_PROJECTS_MEMORY_DIR,
   sessionSearch: { variant: "legacy" },
+  storage: { backend: "local" },
 };
 export const DEFAULT_CONFIG_PATH = OMP_CONFIG_PATH;
 /** Search order: primary (extension dir) → legacy (pre-v0.8 flat path). */
@@ -75,7 +76,9 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
   const isStringArray = (value: unknown): value is string[] => (
     Array.isArray(value) && value.every((item) => typeof item === "string")
   );
-
+  const isRecord = (value: unknown): value is Record<string, unknown> => (
+    typeof value === "object" && value !== null
+  );
   let hasLegacyAutoConsolidate = false;
   let hasMemoryOverflowStrategy = false;
 
@@ -131,6 +134,38 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
   ) {
     config.sessionSearch = { variant: (parsed.sessionSearch as { variant: SessionSearchVariant }).variant };
   }
+  if (isRecord(parsed.storage)) {
+    if (parsed.storage.backend === "local") {
+      config.storage = { backend: "local" };
+    } else if (parsed.storage.backend === "s3" && isRecord(parsed.storage.s3)) {
+      const endpoint = typeof parsed.storage.s3.endpoint === "string" ? parsed.storage.s3.endpoint.trim() : "";
+      const accessKey = typeof parsed.storage.s3.access_key === "string" ? parsed.storage.s3.access_key.trim() : "";
+      const secretKey = typeof parsed.storage.s3.secret_key === "string" ? parsed.storage.s3.secret_key.trim() : "";
+      const bucket = typeof parsed.storage.s3.bucket === "string" ? parsed.storage.s3.bucket.trim() : "";
+      const path = typeof parsed.storage.s3.path === "string" ? parsed.storage.s3.path.trim() : undefined;
+      const forcePathStyle = parsed.storage.s3.forcePathStyle;
+
+      if (
+        endpoint.length > 0
+        && accessKey.length > 0
+        && secretKey.length > 0
+        && bucket.length > 0
+        && path !== undefined
+      ) {
+        config.storage = {
+          backend: "s3",
+          s3: {
+            endpoint,
+            accessKey,
+            secretKey,
+            bucket,
+            path,
+            ...(typeof forcePathStyle === "boolean" ? { forcePathStyle } : {}),
+          },
+        };
+      }
+    }
+  }
   if (typeof parsed.llmModelOverride === "string") {
     const trimmed = parsed.llmModelOverride.trim();
     if (trimmed.length > 0) config.llmModelOverride = trimmed;
@@ -168,6 +203,8 @@ function buildDefaultConfigTemplate(): Record<string, unknown> {
     userCharLimit: DEFAULT_CONFIG.userCharLimit,
     projectCharLimit: DEFAULT_CONFIG.projectCharLimit,
     projectsMemoryDir: DEFAULT_CONFIG.projectsMemoryDir,
+    "// storage": "local keeps Markdown on disk. s3 syncs global memory, active project memory, and referenced same-directory Markdown detail files through an S3-compatible bucket.",
+    storage: DEFAULT_CONFIG.storage,
 
     "// learning-loop": "Background review auto-saves memory every N turns, every N tool calls, or after N ms idle.",
     reviewEnabled: DEFAULT_CONFIG.reviewEnabled,

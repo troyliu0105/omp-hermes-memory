@@ -1,6 +1,6 @@
 {
   "name": "omp-hermes-memory",
-  "version": "0.7.16",
+  "version": "0.8.0",
   "description": "🧠 Persistent memory + 🔍 session search + 🛡️ secret scanning for Oh My Pi. Fully compatible with existing pi-hermes-memory config and memory files.",
   "type": "module",
   "main": "src/index.ts",
@@ -59,6 +59,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@oh-my-pi/pi-tui": "^15.11.6",
     "better-sqlite3": "^12.9.0"
   }
