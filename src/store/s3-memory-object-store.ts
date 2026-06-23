@@ -101,6 +101,7 @@ export class S3MemoryObjectStore implements MemoryObjectStore {
     assertSafeKey(key);
     const objectKey = this.objectKey(key);
 
+    let readError: unknown = null;
     try {
       const response = await this.client.send(new GetObjectCommand({
         Bucket: this.bucket,
@@ -114,7 +115,7 @@ export class S3MemoryObjectStore implements MemoryObjectStore {
       }
       return { content, version: response.ETag };
     } catch (error) {
-      if (!isMissingS3Object(error)) throw error;
+      readError = error;
     }
 
     let localFallback: string | null = null;
@@ -123,6 +124,11 @@ export class S3MemoryObjectStore implements MemoryObjectStore {
       localFallback = cached?.content?.trim() ? cached.content : null;
     } catch {
       localFallback = null;
+    }
+
+    if (readError && !isMissingS3Object(readError)) {
+      if (localFallback !== null) return { content: localFallback };
+      throw readError;
     }
 
     if (localFallback === null) {

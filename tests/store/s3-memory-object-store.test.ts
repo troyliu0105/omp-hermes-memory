@@ -139,6 +139,33 @@ describe("S3MemoryObjectStore", () => {
     );
   });
 
+  it("falls back to local cache when remote read is denied but cached content exists", async () => {
+    const client = fakeClient(() => {
+      throw s3Error("AccessDenied", 403);
+    });
+    const cache: MemoryObjectStore = {
+      async readText(key) {
+        assert.equal(key, "MEMORY.md");
+        return { content: "cached memory" };
+      },
+      async writeText() {
+        throw new Error("should not write cache during fallback read");
+      },
+    };
+
+    const store = new S3MemoryObjectStore({
+      endpoint: "https://wolke.asswecan.org:9443",
+      accessKey: "access-key",
+      secretKey: "secret-key",
+      bucket: "memory-bucket",
+      path: "base/global",
+      localCache: cache,
+    }, client);
+
+    const result = await store.readText("MEMORY.md");
+    assert.deepStrictEqual(result, { content: "cached memory" });
+  });
+
   it("returns null for missing objects signaled as NoSuchKey, NotFound, or HTTP 404", async () => {
     for (const error of [
       s3Error("NoSuchKey", 404),
