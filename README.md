@@ -133,7 +133,7 @@ The extension stores memory at two levels:
 | **Global** | `~/.omp/agent/omp-hermes-memory/` | Facts that apply everywhere — your name, preferences, OS, tools | Searchable via `memory_search` |
 | **Project** | `~/.omp/agent/projects-memory/<project>/` | Facts scoped to one codebase — architecture decisions, API quirks, team norms | Searchable when cwd matches the project |
 
-By default, full Markdown memories are **not** injected into the system prompt. The system prompt gets a full-detail `<memory-policy>` that tells the agent when to call `memory_search` and how to treat memory results. This keeps first-turn token usage low while preserving access to user, project, failure, correction, insight, preference, convention, and tool-quirk memories.
+By default, full Markdown memories are **not** injected into the system prompt. The system prompt gets a full-detail `<memory-policy>` that tells the agent when to call `memory_search` and how to treat memory results. This keeps first-turn token usage low while preserving access to user, project, failure, correction, insight, preference, convention, and tool-quirk memories. Global failure memory stores generalized cross-project lessons. Concrete repo incidents, workflows, APIs, commands, paths, branches, versions, and bugs belong in project memory.
 
 ```
 System Prompt
@@ -156,19 +156,19 @@ The agent learns from failures, corrections, and insights — just like humans d
 
 | Category | What it stores | Example |
 |---|---|---|
-| `failure` | What didn't work and why | "Tried localStorage for tokens — XSS vulnerability" |
+| `failure` | Generalized cross-project lessons about what failed and why | "When auth tests cover multiple request-building branches, assert secondary fields as well as the primary token payload" |
 | `correction` | User corrections | "Use pnpm, not npm" |
 | `insight` | Learnings from experience | "Auth0 SDK handles refresh tokens automatically" |
 | `preference` | User preferences | "Prefers dark theme" |
-| `convention` | Project conventions | "Monorepo uses turborepo" |
+| `convention` | Cross-project or team conventions that apply outside one repo | "Release branches are cut from the stabilized integration branch" |
 | `tool-quirk` | Tool-specific knowledge | "CI needs --frozen-lockfile" |
 
 ### How It Works
 
-1. **Auto-detection**: Background review extracts failures from conversations
-2. **Correction capture**: When you correct the agent, it saves what went wrong
+1. **Auto-detection**: Background review extracts durable memories from conversations and chooses the narrowest target
+2. **Correction capture**: When you correct the agent, repo-specific corrections go to project memory and generalized lessons can go to failure memory
 3. **Search guidance**: The memory policy tells the agent when to search failures instead of injecting them by default
-4. **Searchable**: Use `memory_search("auth", category: "failure")` to find past failures
+4. **Searchable**: Use `memory_search("auth", category: "failure")` to find past generalized failures, or project memory for repo-specific incidents
 
 ### Example
 
@@ -194,9 +194,9 @@ The agent gets a `memory` tool it can call proactively:
 
 | Action | Target | What it does |
 |---|---|---|
-| `add` | `memory` or `user` | Append a new entry |
-| `replace` | `memory` or `user` | Update an existing entry (matched by substring) |
-| `remove` | `memory` or `user` | Delete an entry (matched by substring) |
+| `add` | `memory`, `user`, `project`, or `failure` | Append a new entry |
+| `replace` | `memory`, `user`, `project`, or `failure` | Update an existing entry (matched by substring) |
+| `remove` | `memory`, `user`, `project`, or `failure` | Delete an entry (matched by substring) |
 
 ### The `memory_list` Tool
 

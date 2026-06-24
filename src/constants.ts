@@ -39,10 +39,18 @@ Persistent memory is available through memory tools. Do not assume memory has al
 Use memory_list when you need to inspect every current memory entry exactly. Use memory_search when the current task may depend on durable context from previous sessions and a focused query is enough.
 
 Memory write targets:
-- user: who the user is, their preferences, communication style, and standing instructions.
-- memory: global notes, environment facts, durable learnings, and cross-project tool behavior.
-- project: project-specific conventions, architecture decisions, commands, package manager choices, and repo workflows.
-- failure: failures, corrections, insights, conventions, preferences, and tool quirks captured as categorized lessons.
+- user: stable facts about the human user — identity, role, communication style, and preferences that apply across projects and tools.
+- memory: global notes — environment facts, durable tool quirks, and cross-project lessons that apply in unrelated repositories.
+- project: project-specific notes — architecture decisions, APIs, commands, paths, branches, versions, bugs, migration notes, repo workflows, and conventions scoped to the active project.
+- failure: global categorized lessons — failures, corrections, insights, conventions, preferences, and tool quirks only after they have been generalized so they remain useful across unrelated projects.
+
+Target selection rules:
+- Default to the narrowest durable scope that will still be useful later.
+- If an entry names a repository, package, module, function, file path, branch, version, migration, product-specific workflow, or says "this repo"/"this project", use target="project" and preserve the concrete details there.
+- Use target="user" only for facts about the person that remain true across repositories. Do not put project workflow instructions or repo-specific tool choices in USER.md, even when phrased as "always" or "don't".
+- Use target="memory" only for global environment/tool facts or lessons that apply across unrelated projects.
+- Use target="failure" only for cross-project reusable lessons. Strip project names, function names, file paths, versions, and incident-specific details; keep the generalized invariant. If the concrete incident matters, save that detail separately with target="project".
+- For corrections, choose the target by scope: user-wide preference/correction -> target="user"; repo-specific correction -> target="project"; generalized lesson from the correction -> target="failure" only after removing project-specific details.
 
 memory_search filters:
 - target accepts "memory", "user", or "failure".
@@ -50,17 +58,17 @@ memory_search filters:
 - category filters categorized failure/lesson memories only.
 
 Accepted memory categories:
-- failure: something tried previously that did not work, with the error or reason when known.
-- correction: something the user corrected or told the agent not to repeat.
-- insight: a durable learning from prior work.
-- preference: a user preference or stable way the user wants work done.
-- convention: a project or team convention.
-- tool-quirk: non-obvious behavior of a tool, package manager, framework, API, or command.
+- failure: a generalized cross-project lesson about something tried previously that did not work, with the error or reason when known.
+- correction: a user-wide or cross-project correction the agent should remember; project-specific corrections belong in target="project".
+- insight: a durable cross-project learning from prior work; project-specific insights belong in target="project".
+- preference: a stable user preference that applies across projects; project-specific preferences belong in target="project".
+- convention: a cross-project/team convention; repo-specific conventions belong in target="project".
+- tool-quirk: non-obvious behavior of a tool or API that applies outside a single repository; repo-local quirks belong in target="project".
 
 Search guidance:
-- For user preferences, search target="user" with concrete terms from the request.
-- For project conventions or repo decisions, search with the current project filter and concrete terms from the request.
-- For debugging, test failures, build errors, or repeated mistakes, search target="failure" and categories "failure", "correction", "insight", or "tool-quirk".
+- For user-wide preferences, search target="user" with concrete terms from the request.
+- For project conventions, repo-specific bugs, workflow instructions, APIs, commands, paths, or decisions, search with the current project filter and concrete terms from the request.
+- For debugging, test failures, build errors, or repeated mistakes, first decide whether the lesson is project-specific or cross-project. Search target="failure" with category filters only for generalized cross-project lessons; search project memory for repo-specific incidents.
 - For general durable learnings, search target="memory" with concrete terms from the request.
 - Use category only for categorized failure/lesson searches; ordinary user, global, and project memories may not have a category.
 - Prefer narrower searches first: include project, target, and concrete terms from the user's request or tool error.
@@ -91,7 +99,9 @@ Persistent memory is available through memory tools. Do not assume memory has al
 
 Use memory_list for an exact inventory of current Markdown-backed memory entries. Use memory_search when durable context from previous sessions may help and a focused query is enough.
 
-Memory write targets: user for preferences/profile; memory for global notes and environment/tool facts; project for repo-specific conventions and workflows; failure for categorized lessons.
+Memory write targets: user for person-level facts that apply across projects; memory for global environment/tool facts; project for repo-specific commands, APIs, bugs, workflows, paths, versions, branches, and conventions; failure for generalized cross-project lessons only.
+
+Default to the narrowest durable scope. If a memory names a repository, package, module, function, file path, branch, version, migration, or says "this repo"/"this project", save it to project memory. Do not put repo workflow instructions in USER.md. Before using target="failure", strip project-specific details and keep only the reusable lesson; save concrete incident details to project memory.
 
 memory_search filters: target searches user/global/failure memories; project filters project-scoped memories; category filters categorized failure/lesson memories only.
 
@@ -117,17 +127,23 @@ WHEN TO SAVE (do this proactively, don't wait to be asked):
 - User corrects you or says 'remember this' / 'don't do that again'
 - User shares a preference, habit, or personal detail (name, role, timezone, coding style)
 - You discover something about the environment (OS, installed tools, project structure)
-- You learn a convention, API quirk, or workflow specific to this user's setup
+- You learn a convention, API quirk, or workflow specific to this user's setup; use target='project' when it is tied to the active repository
 - You identify a stable fact that will be useful again in future sessions
 
 PRIORITY: User preferences and corrections > environment facts > procedural knowledge.
 
 Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO state.
 
-THREE TARGETS:
-- 'user': who the user is -- name, role, preferences, communication style, pet peeves
-- 'memory': your global notes -- environment facts, tool quirks, lessons learned (shared across all projects)
-- 'project': project-specific notes -- architecture decisions, API quirks, team norms, codebase conventions (scoped to current project)
+FOUR TARGETS:
+- 'user': who the user is -- identity, role, communication style, and preferences that apply across projects
+- 'memory': global notes -- environment facts, durable tool quirks, and cross-project lessons shared across all projects
+- 'project': project-specific notes -- architecture decisions, APIs, commands, paths, branches, versions, bugs, migration notes, repo workflows, and conventions scoped to the current project
+- 'failure': global categorized lessons -- generalized failures, corrections, insights, conventions, preferences, and tool quirks that remain useful across unrelated projects; strip project-specific details before saving here
+
+TARGET SELECTION:
+- Default to target='project' for facts tied to a repository, package, module, function, file path, branch, version, migration, or repo workflow.
+- Use target='user' only for person-level facts that remain true across repositories; repo workflow instructions do not belong in USER.md.
+- Use target='failure' only for generalized cross-project lessons. If the useful memory depends on concrete project names, functions, versions, or paths, use target='project'.
 
 ACTIONS: add (new entry), replace (update existing -- old_text identifies it), remove (delete -- old_text identifies it).`;
 // ─── Structured-output system prompt (shared by all in-process reviews) ───
@@ -153,10 +169,18 @@ Each operation is an object with these fields:
 }
 
 TARGETS:
-- "user": who the user is — name, role, preferences, communication style, pet peeves
-- "memory": global notes — environment facts, tool quirks, lessons learned (shared across all projects)
-- "project": project-specific notes — architecture decisions, API quirks, team norms, codebase conventions
-- "failure": categorized lessons — failures, corrections, insights, conventions, tool quirks
+- "user": person-level facts — identity, role, communication style, and preferences that apply across projects
+- "memory": global notes — environment facts, durable tool quirks, and lessons shared across unrelated projects
+- "project": project-specific notes — architecture decisions, APIs, commands, paths, branches, versions, bugs, migration notes, repo workflows, and conventions scoped to the active project
+- "failure": global categorized lessons — generalized failures, corrections, insights, conventions, and tool quirks that remain useful across unrelated projects
+
+SCOPE RULES:
+- Choose the narrowest durable target.
+- If content names a repository, package, module, function, file path, branch, version, migration, or repo workflow, emit target="project" and keep those concrete details there.
+- If content is a project-specific bug or incident, emit target="project". Do not emit target="failure" for the raw incident.
+- If a failure contains a reusable lesson, emit target="failure" only for the generalized lesson after removing project-specific names, versions, functions, and paths.
+- If the user correction is repo-specific, emit target="project". If it is a user-wide preference, emit target="user". If it yields a generalized cross-project lesson, emit target="failure" with the generalized lesson only.
+- Do not write repo workflow instructions to target="user".
 
 RULES:
 - Only save facts that will matter in FUTURE sessions. Do not save task progress, session outcomes, or temporary state.
@@ -166,23 +190,29 @@ RULES:
 - Entries should be concise (1-2 sentences) and self-contained.
 
 EXAMPLE OUTPUT:
-[{"action":"add","target":"user","content":"Prefers pnpm over npm for all package management"},{"action":"add","target":"failure","content":"Running tests with NODE_OPTIONS=--max-old-space-size=4096 causes OOM on this machine — use 8192","category":"failure","failure_reason":"OOM crash"}]`;
+[
+  {"action":"add","target":"project","content":"When reconciling Hermes local changes with upstream, inspect the previous local implementation and diff against the upstream base before editing; do not apply guessed fixes first."},
+  {"action":"add","target":"failure","content":"When tests cover multiple request-building branches, assert all relevant output fields, including filters and secondary parameters, not only the primary vector/channel fields.","category":"failure","failure_reason":"A branch dropped a secondary request field that tests did not assert"}
+]`;
 
 // ─── Background review prompt (in-process variant) ───
 export const REVIEW_USER_PROMPT = `Review the conversation below and extract memories worth saving.
 
 Consider:
-1. User preferences, habits, and personal details (target: "user")
-2. Environment facts, tool quirks, lessons learned (target: "memory" or "project")
-3. Failures, corrections, and insights (target: "failure" with appropriate category)
+1. User identity, communication style, and preferences that apply across projects (target: "user")
+2. Environment facts, global tool quirks, and cross-project lessons (target: "memory")
+3. Repo-specific commands, paths, APIs, architecture, workflows, bugs, migrations, branches, versions, and conventions (target: "project")
+4. Generalized failures, corrections, and insights that remain useful across unrelated projects after project-specific details are removed (target: "failure" with appropriate category)
 
 Categories for failure target:
-- "failure": what was tried but didn't work (include what error occurred and what worked instead)
-- "correction": the user corrected the agent
-- "insight": a durable learning from the experience
-- "convention": a project convention discovered
-- "tool-quirk": non-obvious tool-specific behavior
-- "preference": a stable user preference
+- "failure": a generalized cross-project lesson about something tried previously that did not work, with the error or reason when known
+- "correction": a user-wide or cross-project correction the agent should remember; project-specific corrections belong in target="project"
+- "insight": a durable cross-project learning from prior work; project-specific insights belong in target="project"
+- "convention": a cross-project/team convention; repo-specific conventions belong in target="project"
+- "tool-quirk": non-obvious behavior of a tool or API that applies outside a single repository; repo-local quirks belong in target="project"
+- "preference": a stable user preference that applies across projects; project-specific preferences belong in target="project"
+
+If a candidate memory would mention the current repo, a package/module/function name, file path, branch, version, migration, or repo-specific workflow, choose target="project" instead of user/memory/failure.
 
 Do NOT save task progress, completed work, or temporary state. Only act if there's something genuinely worth persisting for future sessions.`;
 
@@ -193,6 +223,8 @@ Prioritize:
 1. User preferences and corrections (highest priority)
 2. Recurring patterns and stable facts
 3. Environment and tool discoveries
+
+Apply the same target-scope rules as the review prompt. Project-specific corrections, workflows, bugs, commands, paths, APIs, migrations, branches, and versions go to target="project". USER.md is only for person-level facts that apply across projects. Global failure memory is only for generalized reusable lessons with project-specific details removed.
 
 Do NOT save task-specific details that won't matter in future sessions.`;
 

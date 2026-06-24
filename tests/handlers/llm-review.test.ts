@@ -19,6 +19,11 @@ import {
 } from "../../src/handlers/llm-review.js";
 import type { LlmCallFn } from "../../src/handlers/llm-review.js";
 import { MemoryStore } from "../../src/store/memory-store.js";
+import {
+  REVIEW_SYSTEM_PROMPT,
+  REVIEW_USER_PROMPT,
+  FLUSH_USER_PROMPT,
+} from "../../src/constants.js";
 
 // ─── Mock helpers ───
 
@@ -342,6 +347,25 @@ describe("runLlmReview", () => {
       { llmCall: multiBlockLlmCall },
     );
     assert.strictEqual(result.text, "first second");
+  });
+});
+
+describe("review prompt scope guidance", () => {
+  it("keeps scope rules in the review system prompt", () => {
+    assert.match(REVIEW_SYSTEM_PROMPT, /SCOPE RULES/);
+    assert.match(REVIEW_SYSTEM_PROMPT, /If content names a repository/);
+    assert.match(REVIEW_SYSTEM_PROMPT, /Do not emit target="failure" for the raw incident/);
+    assert.match(REVIEW_SYSTEM_PROMPT, /\{"action":"add","target":"project","content":"When reconciling Hermes local changes with upstream/);
+  });
+
+  it("keeps project-first scope guidance in the review user prompt", () => {
+    assert.match(REVIEW_USER_PROMPT, /Repo-specific commands, paths, APIs, architecture, workflows, bugs, migrations, branches, versions, and conventions \(target: "project"\)/);
+    assert.match(REVIEW_USER_PROMPT, /choose target="project" instead of user\/memory\/failure/);
+  });
+
+  it("keeps project-first scope guidance in the flush prompt", () => {
+    assert.match(FLUSH_USER_PROMPT, /Project-specific corrections, workflows, bugs, commands, paths, APIs, migrations, branches, and versions go to target="project"/);
+    assert.match(FLUSH_USER_PROMPT, /USER\.md is only for person-level facts/);
   });
 });
 

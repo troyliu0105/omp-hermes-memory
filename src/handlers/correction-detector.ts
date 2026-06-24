@@ -113,6 +113,7 @@ export function setupCorrectionDetector(
   updateGate: MemoryUpdateGate,
   dbManager: DatabaseManager | null = null,
   projectName?: string | null,
+  reviewFn: typeof reviewAndApply = reviewAndApply,
 ): void {
   if (!config.correctionDetection) return;
 
@@ -198,7 +199,7 @@ export function setupCorrectionDetector(
 
         correctionCtx.ui.notify("🔧 Correction detected — saving memory…", "info");
 
-        const result = await reviewAndApply(
+        const result = await reviewFn(
           correctionCtx,
           REVIEW_SYSTEM_PROMPT,
           userPromptSections.join("\n"),
@@ -212,6 +213,7 @@ export function setupCorrectionDetector(
           correctionCtx.ui.notify("⚠️ Correction save failed (will retry on next correction)", "warning");
         } else if (result.applied > 0) {
           correctionCtx.ui.notify(`🔧 Correction saved to memory (${result.applied} entries)`, "info");
+          return;
         }
 
         try {
@@ -222,10 +224,27 @@ export function setupCorrectionDetector(
           const directive = extractCorrectionDirective(correctionText);
           const failureReason = "User corrected the agent";
           const scopedProjectName = projectStore ? projectName?.trim() || null : null;
+
+          if (projectStore && scopedProjectName) {
+            const addResult = await projectStore.add("memory", directive);
+            if (!addResult.success || !dbManager) return;
+
+            try {
+              syncMemoryEntry(dbManager, {
+                content: directive,
+                target: "memory",
+                project: scopedProjectName,
+              });
+            } catch {
+              // Best-effort — searchable sync should not block correction capture
+            }
+
+            return;
+          }
+
           const addResult = await store.addFailure(directive, {
             category: "correction",
             failureReason,
-            project: scopedProjectName ?? undefined,
           });
 
           if (!addResult.success || !dbManager) return;
@@ -235,10 +254,9 @@ export function setupCorrectionDetector(
               content: formatFailureMemoryContent(directive, {
                 category: "correction",
                 failureReason,
-                project: scopedProjectName,
               }),
               target: "failure",
-              project: scopedProjectName,
+              project: null,
               category: "correction",
               failureReason,
             });

@@ -48,6 +48,10 @@ describe("registerMemoryTool", () => {
     assert.strictEqual(tool.name, "memory", "tool name should be 'memory'");
     assert.strictEqual(tool.label, "Memory", "tool label should be 'Memory'");
     assert.ok(tool.parameters, "parameters schema should be defined");
+    assert.match(tool.description, /FOUR TARGETS/);
+    assert.match(tool.description, /'failure': global categorized lessons/);
+    assert.match(tool.description, /Default to target='project'/);
+    assert.match(tool.description, /repo workflow instructions do not belong in USER\.md/);
   });
 
   it("execute add returns JSON with usage field", async () => {

@@ -226,8 +226,9 @@ function registerCorrectionDetector(
   config: Parameters<typeof setupCorrectionDetector>[3],
   dbManager?: Parameters<typeof setupCorrectionDetector>[5],
   projectName?: Parameters<typeof setupCorrectionDetector>[6],
+  reviewFn?: Parameters<typeof setupCorrectionDetector>[7],
 ) {
-  setupCorrectionDetector(pi, store, projectStore, config, updateGate, dbManager, projectName);
+  setupCorrectionDetector(pi, store, projectStore, config, updateGate, dbManager, projectName, reviewFn);
 }
 
 // ─── Handler behavior tests ───
@@ -484,8 +485,13 @@ describe("setupCorrectionDetector handler", () => {
       getUserEntries: () => [],
       addFailure: async () => ({ success: true, target: "failure", entry_count: 1, message: "Failure memory saved: correction" }),
     } as unknown as import("../../src/store/memory-store.js").MemoryStore;
+    let projectAddArgs: { target: string; content: string } | null = null;
     const projectStore = {
       getMemoryEntries: () => ["existing project entry"],
+      add: async (target: string, content: string) => {
+        projectAddArgs = { target, content };
+        return { success: true, target: "memory", entry_count: 1, message: "Memory saved" };
+      },
     } as unknown as import("../../src/store/memory-store.js").MemoryStore;
 
     registerCorrectionDetector(pi, correctionStore, projectStore, config, dbManager, "project-a");
@@ -500,11 +506,57 @@ describe("setupCorrectionDetector handler", () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
-    const projectFailures = getMemories(dbManager, { target: "failure", project: "project-a" });
-    assert.strictEqual(projectFailures.length, 1);
-    assert.match(projectFailures[0].content, /use pnpm in this repo/);
-    assert.match(projectFailures[0].content, /Project: project-a/);
-    assert.strictEqual(projectFailures[0].category, "correction");
+    assert.ok(projectAddArgs, "projectStore.add should be called for project-scoped corrections");
+    assert.strictEqual(projectAddArgs?.target, "memory");
+    assert.match(projectAddArgs?.content ?? "", /use pnpm in this repo/);
+
+    const projectMemories = getMemories(dbManager, { target: "memory", project: "project-a" });
+    assert.strictEqual(projectMemories.length, 1);
+    assert.match(projectMemories[0].content, /use pnpm in this repo/);
+  });
+  
+  it("skips the direct fallback after a successful LLM review", async () => {
+    const pi = createMockPi();
+    let addFailureCalls = 0;
+    const correctionStore = {
+      getMemoryEntries: () => ["existing entry"],
+      getUserEntries: () => [],
+      addFailure: async () => {
+        addFailureCalls++;
+        return { success: true, target: "failure", entry_count: 1, message: "Failure memory saved: correction" };
+      },
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
+    let projectAddCalls = 0;
+    const projectStore = {
+      getMemoryEntries: () => ["existing project entry"],
+      add: async () => {
+        projectAddCalls++;
+        return { success: true, target: "memory", entry_count: 1, message: "Memory saved" };
+      },
+    } as unknown as import("../../src/store/memory-store.js").MemoryStore;
+    const reviewFn: Parameters<typeof setupCorrectionDetector>[7] = async () => ({
+      applied: 1,
+      skipped: 0,
+      nothingToSave: false,
+    });
+
+    registerCorrectionDetector(pi, correctionStore, projectStore, config, dbManager, "project-a", reviewFn);
+
+    const branch = [
+      { type: "message", message: { role: "user", content: [{ type: "text", text: "no, use pnpm in this repo" }] } },
+      { type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+    ];
+
+    fireMessageEnd("user", "no, use pnpm in this repo");
+    fireTurnEnd(branch);
+    await flushMicrotasks();
+
+    assert.strictEqual(addFailureCalls, 0, "global failure fallback should stay idle after a successful review");
+    assert.strictEqual(projectAddCalls, 0, "project fallback should stay idle after a successful review");
+    assert.ok(
+      notifyCalls.some((c) => c.msg.includes("Correction saved to memory (1 entries)")),
+      "successful review should emit a saved notification",
+    );
   });
 
   it("does not break correction handling when SQLite sync fails", async () => {
