@@ -74,6 +74,8 @@ export interface MemoryConfig {
   failureInjectionMaxEntries: number;
   /** Tool calls before triggering background review (in addition to turn count). Default: 15 */
   nudgeToolCalls: number;
+  /** Expose the skill_manage tool to the agent. Default: true */
+  skillToolEnabled: boolean;
   /** Maximum time in milliseconds for auto-consolidation to complete. Default: 60000 */
   consolidationTimeoutMs: number;
   /** Idle milliseconds before triggering background review (0 = disabled). Default: 120000 */

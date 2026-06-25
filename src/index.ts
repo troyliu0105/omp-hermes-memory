@@ -187,8 +187,10 @@ export default function (pi: ExtensionAPI) {
   registerMemoryTool(pi, store, projectStore, dbManager, projectName);
   registerMemoryListTool(pi, store, projectStore, projectName);
 
-  // ── 4. Register the skill tool ──
-  registerSkillTool(pi, skillStore);
+  // ── 4. Register the skill tool (toggleable via config) ──
+  if (config.skillToolEnabled) {
+    registerSkillTool(pi, skillStore);
+  }
 
   // ── 5. Setup background learning loop (with tool-call-aware nudge) ──
   setupBackgroundReview(pi, store, projectStore, config, memoryUpdateGate);

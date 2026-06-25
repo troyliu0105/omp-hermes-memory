@@ -31,6 +31,7 @@ describe("loadConfig", () => {
     assert.strictEqual(config.failureInjectionEnabled, true);
     assert.strictEqual(config.failureInjectionMaxAgeDays, 7);
     assert.strictEqual(config.failureInjectionMaxEntries, 5);
+    assert.strictEqual(config.skillToolEnabled, true);
     assert.strictEqual(config.projectsMemoryDir, "projects-memory");
     assert.deepStrictEqual(config.sessionSearch, { variant: "legacy" });
     assert.strictEqual(config.llmModelOverride, undefined);
@@ -51,6 +52,7 @@ describe("loadConfig", () => {
       failureInjectionEnabled: false,
       failureInjectionMaxAgeDays: 30,
       failureInjectionMaxEntries: 2,
+      skillToolEnabled: false,
       projectsMemoryDir: "my-memory",
       llmModelOverride: " openrouter/deepseek/deepseek-v4-flash ",
       llmThinkingOverride: "minimal",
@@ -66,6 +68,7 @@ describe("loadConfig", () => {
     assert.strictEqual(config.failureInjectionEnabled, false);
     assert.strictEqual(config.failureInjectionMaxAgeDays, 30);
     assert.strictEqual(config.failureInjectionMaxEntries, 2);
+    assert.strictEqual(config.skillToolEnabled, false);
     assert.strictEqual(config.projectsMemoryDir, "my-memory");
     assert.strictEqual(config.llmModelOverride, "openrouter/deepseek/deepseek-v4-flash");
     assert.strictEqual(config.llmThinkingOverride, "minimal");
@@ -87,6 +90,7 @@ describe("loadConfig", () => {
     assert.strictEqual(config.failureInjectionEnabled, true);
     assert.strictEqual(config.failureInjectionMaxAgeDays, 7);
     assert.strictEqual(config.failureInjectionMaxEntries, 5);
+    assert.strictEqual(config.skillToolEnabled, true);
     assert.strictEqual(config.projectsMemoryDir, "projects-memory");
     assert.strictEqual(config.llmModelOverride, undefined);
     assert.strictEqual(config.llmThinkingOverride, undefined);

@@ -59,6 +59,7 @@ const DEFAULT_CONFIG: MemoryConfig = {
   failureInjectionMaxAgeDays: DEFAULT_FAILURE_INJECTION_MAX_AGE_DAYS,
   failureInjectionMaxEntries: DEFAULT_FAILURE_INJECTION_MAX_ENTRIES,
   nudgeToolCalls: DEFAULT_NUDGE_TOOL_CALLS,
+  skillToolEnabled: true,
   idleReviewMs: DEFAULT_IDLE_REVIEW_MS,
   consolidationTimeoutMs: DEFAULT_CONSOLIDATION_TIMEOUT_MS,
   projectsMemoryDir: DEFAULT_PROJECTS_MEMORY_DIR,
@@ -117,6 +118,7 @@ function applyParsedConfig(config: MemoryConfig, parsed: Record<string, unknown>
   if (typeof parsed.failureInjectionMaxAgeDays === "number") config.failureInjectionMaxAgeDays = parsed.failureInjectionMaxAgeDays;
   if (typeof parsed.failureInjectionMaxEntries === "number") config.failureInjectionMaxEntries = parsed.failureInjectionMaxEntries;
   if (typeof parsed.nudgeToolCalls === "number") config.nudgeToolCalls = parsed.nudgeToolCalls;
+  if (typeof parsed.skillToolEnabled === "boolean") config.skillToolEnabled = parsed.skillToolEnabled;
   if (isNonNegativeNumber(parsed.idleReviewMs)) config.idleReviewMs = parsed.idleReviewMs;
   if (typeof parsed.projectCharLimit === "number") config.projectCharLimit = parsed.projectCharLimit;
   if (typeof parsed.memoryDir === "string") {
@@ -239,6 +241,8 @@ function buildDefaultConfigTemplate(): Record<string, unknown> {
     failureInjectionMaxEntries: DEFAULT_CONFIG.failureInjectionMaxEntries,
 
     consolidationTimeoutMs: DEFAULT_CONFIG.consolidationTimeoutMs,
+    "// skills": "Expose the skill_manage tool to the agent. Disable to prevent any skill creation/updates.",
+    skillToolEnabled: DEFAULT_CONFIG.skillToolEnabled,
     sessionSearch: DEFAULT_CONFIG.sessionSearch,
   };
 }

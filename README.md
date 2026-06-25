@@ -466,6 +466,7 @@ Create `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` (the current prim
   "memoryOverflowStrategy": "auto-consolidate",
   "autoConsolidate": true,
   "correctionDetection": true,
+  "skillToolEnabled": true,
   "failureInjectionEnabled": true,
   "failureInjectionMaxAgeDays": 7,
   "failureInjectionMaxEntries": 5,
@@ -499,6 +500,7 @@ Create `~/.omp/agent/omp-hermes-memory/omp-hermes-memory.json` (the current prim
 | `autoConsolidate` | `true` | Legacy alias for `memoryOverflowStrategy` when `memoryOverflowStrategy` is not set (`true` = `auto-consolidate`, `false` = `reject`) |
 | `consolidationTimeoutMs` | `60000` | Maximum time in milliseconds for auto-consolidation to complete |
 | `correctionDetection` | `true` | Detect user corrections and save immediately |
+| `skillToolEnabled` | `true` | Expose the `skill_manage` tool to the agent. Set to `false` to disable all skill creation/updates from the agent (existing skills remain readable via `/memory-skills` and project skill discovery) |
 | `correctionStrongPatterns` | unset | Optional case-insensitive regex sources replacing strong correction patterns; omitted preserves defaults, invalid entries are ignored |
 | `correctionWeakPatterns` | unset | Optional case-insensitive regex sources replacing weak correction patterns; omitted preserves defaults, invalid entries are ignored |
 | `correctionNegativePatterns` | unset | Optional case-insensitive regex sources replacing negative correction patterns; omitted preserves defaults, invalid entries are ignored |
