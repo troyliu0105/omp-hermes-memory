@@ -165,10 +165,11 @@ describe("triggerConsolidation", () => {
     try {
       await projectStore.add("memory", "repo uses npm");
       await projectStore.add("memory", "repo uses pnpm");
+      await projectStore.add("memory", "legacy build step");
 
       const llmCall = createMockLlmCall([
         { action: "replace", target: "project", match: "repo uses npm", content: "repo uses pnpm" },
-        { action: "remove", target: "project", match: "repo uses pnpm" },
+        { action: "remove", target: "project", match: "legacy build step" },
       ]);
 
       const result = await triggerConsolidation(

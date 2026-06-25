@@ -16,6 +16,7 @@ import {
   syncMemoryEntry,
 } from "../store/sqlite-memory-store.js";
 import { MEMORY_TOOL_DESCRIPTION } from "../constants.js";
+import { checkScopeViolation, scopeViolationMessage } from "../store/scope-guard.js";
 import type { MemoryCategory, MemoryResult } from "../types.js";
 
 function appendSyncWarning(result: MemoryResult, warning: string): MemoryResult {
@@ -258,6 +259,20 @@ export function registerMemoryTool(
               details: {},
             };
           }
+          // Scope enforcement: global USER.md / MEMORY.md must not receive
+          // project-specific content. 'project' and 'failure' targets are exempt
+          // (project is the intended destination; failure is global by design
+          // and the prompt instructs stripping project details there).
+          if (rawTarget === "user" || rawTarget === "memory") {
+            const scopeCheck = checkScopeViolation(content);
+            if (scopeCheck.violated) {
+              result = {
+                success: false,
+                error: scopeViolationMessage(rawTarget, scopeCheck.detectedSignals),
+              };
+              break;
+            }
+          }
           // Handle failure target with category
           if (rawTarget === "failure") {
             const memoryCategory = (category || "failure") as MemoryCategory;
@@ -305,6 +320,18 @@ export function registerMemoryTool(
               ],
               details: {},
             };
+          }
+          // Scope enforcement (same as add): prevent replacing a global entry
+          // with project-specific content.
+          if (rawTarget === "user" || rawTarget === "memory") {
+            const scopeCheck = checkScopeViolation(content);
+            if (scopeCheck.violated) {
+              result = {
+                success: false,
+                error: scopeViolationMessage(rawTarget, scopeCheck.detectedSignals),
+              };
+              break;
+            }
           }
           result = await store_.replace(target, old_text, content);
           if (result.success) {

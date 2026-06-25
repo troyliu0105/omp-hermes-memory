@@ -149,7 +149,7 @@ describe("MemoryStore", { concurrency: 1 }, () => {
       assert.ok(raw.includes(`${TEST_MARKER} project uses pnpm`));
     });
 
-    it("no-ops on duplicate entry and returns message", async () => {
+    it("rejects duplicate entry with error and does not write", async () => {
       const store = new MemoryStore(makeConfig());
       await store.loadFromDisk();
 
@@ -161,9 +161,9 @@ describe("MemoryStore", { concurrency: 1 }, () => {
       const r2 = await store.add("memory", entry);
       await settle();
 
-      assert.ok(r2.success);
-      assert.equal(r2.entry_count, 1);
-      assert.equal(r2.message, "Entry already exists (no duplicate added).");
+      assert.ok(!r2.success);
+      assert.ok(r2.error!.includes("already exists"));
+      assert.equal(r2.entry_count, undefined);
 
       const raw = await readRaw(memoryPath);
       const count = raw.split(ENTRY_DELIMITER).filter(Boolean).length;
@@ -387,9 +387,8 @@ describe("MemoryStore", { concurrency: 1 }, () => {
 
       assert.ok(first.success);
       assert.equal(first.message, "Failure memory saved: correction");
-      assert.ok(second.success);
-      assert.equal(second.message, "Entry already exists (no duplicate added).");
-      assert.equal(second.entry_count, 1);
+      assert.ok(!second.success);
+      assert.ok(second.error!.includes("already exists"));
 
       const raw = await readRaw(failurePath);
       const count = raw.split(ENTRY_DELIMITER).filter(Boolean).length;
@@ -468,6 +467,30 @@ describe("MemoryStore", { concurrency: 1 }, () => {
 
       assert.ok(!result.success);
       assert.equal(result.error, "new_content cannot be empty. Use 'remove' to delete entries.");
+    });
+    it("collapses duplicate-with-differing-metadata entries into one on replace", async () => {
+      // Same content saved twice with different timestamps; replacing must
+      // collapse both copies into the single new entry.
+      await writeRaw(
+        memoryPath,
+        `${TEST_MARKER} replace-dup <!-- created=2026-06-01, last=2026-06-01 -->${ENTRY_DELIMITER}${TEST_MARKER} replace-dup <!-- created=2026-06-10, last=2026-06-15 -->`,
+      );
+
+      const store = new MemoryStore(makeConfig());
+      await store.loadFromDisk();
+
+      const result = await store.replace("memory", `${TEST_MARKER} replace-dup`, `${TEST_MARKER} replaced-once`);
+      await settle();
+
+      assert.ok(result.success, result.error ?? "replace should succeed");
+      assert.equal(result.message, "Entry replaced.");
+
+      const raw = await readRaw(memoryPath);
+      assert.ok(!raw.includes("replace-dup"));
+      assert.ok(raw.includes(`${TEST_MARKER} replaced-once`));
+      // Exactly one entry remains.
+      const count = raw.split(ENTRY_DELIMITER).filter(Boolean).length;
+      assert.equal(count, 1);
     });
   });
 
@@ -553,6 +576,28 @@ describe("MemoryStore", { concurrency: 1 }, () => {
 
       assert.ok(!result.success);
       assert.equal(result.error, "old_text cannot be empty.");
+    });
+
+    it("removes duplicate entries that differ only by metadata timestamps", async () => {
+      // Simulate the real-world corruption: same content saved twice with
+      // different created/last timestamps (the remove()/replace() stale-matches
+      // bug). Dedup-by-stripped-text must let the user clear these.
+      await writeRaw(
+        memoryPath,
+        `${TEST_MARKER} dup-by-metadata <!-- created=2026-06-01, last=2026-06-01 -->${ENTRY_DELIMITER}${TEST_MARKER} dup-by-metadata <!-- created=2026-06-10, last=2026-06-15 -->`,
+      );
+
+      const store = new MemoryStore(makeConfig());
+      await store.loadFromDisk();
+
+      const result = await store.remove("memory", `${TEST_MARKER} dup-by-metadata`);
+      await settle();
+
+      assert.ok(result.success, result.error ?? "remove should succeed");
+      assert.ok(result.message!.includes("deleted 2 duplicate copies"));
+
+      const raw = await readRaw(memoryPath);
+      assert.ok(!raw.includes("dup-by-metadata"));
     });
   });
 

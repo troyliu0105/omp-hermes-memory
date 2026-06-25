@@ -44,10 +44,12 @@ Memory write targets:
 - project: project-specific notes — architecture decisions, APIs, commands, paths, branches, versions, bugs, migration notes, repo workflows, and conventions scoped to the active project.
 - failure: global categorized lessons — failures, corrections, insights, conventions, preferences, and tool quirks only after they have been generalized so they remain useful across unrelated projects.
 
-Target selection rules:
-- Default to the narrowest durable scope that will still be useful later.
-- If an entry names a repository, package, module, function, file path, branch, version, migration, product-specific workflow, or says "this repo"/"this project", use target="project" and preserve the concrete details there.
-- Use target="user" only for facts about the person that remain true across repositories. Do not put project workflow instructions or repo-specific tool choices in USER.md, even when phrased as "always" or "don't".
+Target selection rules (enforced in code — violations are rejected):
+- HARD RULE: target="user" is ONLY for person-level facts (identity, role, communication style, preferences, habits). NEVER write repo-specific, tool-specific, or project content to USER.md.
+- HARD RULE: target="memory" is ONLY for cross-project environment/tool facts (OS, shell, generic tool quirks that apply in unrelated repos). NEVER write repo-specific facts (paths, file names, versions, config, migrations, build commands) to global MEMORY.md.
+- If an entry names a repository, package, module, function, file path, branch, version, migration, product-specific workflow, or says "this repo"/"this project"/"这个仓库"/"本项目", use target="project" and preserve the concrete details there.
+- Use target="user" only for facts about the person that remain true across repositories. Project workflow instructions and repo-specific tool choices do not belong in USER.md, even when phrased as "always" or "don't".
+- 项目相关记忆（仓库、文件路径、版本号、配置、迁移、构建命令、API 细节）只能写到 target="project"。USER.md 只存与用户本人相关、跨项目不变的事实; 全局 MEMORY.md 只存跨项目通用的环境/工具事实。
 - Use target="memory" only for global environment/tool facts or lessons that apply across unrelated projects.
 - Use target="failure" only for cross-project reusable lessons. Strip project names, function names, file paths, versions, and incident-specific details; keep the generalized invariant. If the concrete incident matters, save that detail separately with target="project".
 - For corrections, choose the target by scope: user-wide preference/correction -> target="user"; repo-specific correction -> target="project"; generalized lesson from the correction -> target="failure" only after removing project-specific details.
@@ -101,7 +103,7 @@ Use memory_list for an exact inventory of current Markdown-backed memory entries
 
 Memory write targets: user for person-level facts that apply across projects; memory for global environment/tool facts; project for repo-specific commands, APIs, bugs, workflows, paths, versions, branches, and conventions; failure for generalized cross-project lessons only.
 
-Default to the narrowest durable scope. If a memory names a repository, package, module, function, file path, branch, version, migration, or says "this repo"/"this project", save it to project memory. Do not put repo workflow instructions in USER.md. Before using target="failure", strip project-specific details and keep only the reusable lesson; save concrete incident details to project memory.
+Default to the narrowest durable scope. HARD RULE (code-enforced): never write repo-specific content (paths, file names, versions, config, migrations, build commands, APIs) to USER.md or global MEMORY.md — always use target="project". USER.md is person-level facts only; global MEMORY.md is cross-project environment/tool facts only. If a memory names a repository, package, module, function, file path, branch, version, or says "this repo"/"this project", use target="project". Before using target="failure", strip project-specific details and keep only the reusable lesson; save concrete incident details to project memory.
 
 memory_search filters: target searches user/global/failure memories; project filters project-scoped memories; category filters categorized failure/lesson memories only.
 
@@ -140,11 +142,12 @@ FOUR TARGETS:
 - 'project': project-specific notes -- architecture decisions, APIs, commands, paths, branches, versions, bugs, migration notes, repo workflows, and conventions scoped to the current project
 - 'failure': global categorized lessons -- generalized failures, corrections, insights, conventions, preferences, and tool quirks that remain useful across unrelated projects; strip project-specific details before saving here
 
-TARGET SELECTION:
-- Default to target='project' for facts tied to a repository, package, module, function, file path, branch, version, migration, or repo workflow.
-- Use target='user' only for person-level facts that remain true across repositories; repo workflow instructions do not belong in USER.md.
+TARGET SELECTION (enforced in code — violations are rejected):
+- HARD RULE: target='user' is ONLY for person-level facts (identity, role, preferences, habits). NEVER write repo-specific, tool-specific, or project content to USER.md.
+- HARD RULE: target='memory' is ONLY for cross-project environment/tool facts (OS, shell, generic tool quirks that apply in unrelated repos). NEVER write repo-specific facts (paths, file names, versions, config, migrations) to global MEMORY.md.
+- Default to target='project' for ANY fact tied to a repository, package, module, function, file path, branch, version, migration, build command, or repo workflow. When in doubt, use 'project'.
+- target='user' / target='memory' 的硬性规则: 项目相关的记忆（仓库、文件路径、版本号、配置、迁移、构建命令、API 细节）只能写到 target='project'。USER.md 只存与用户本人相关、跨项目不变的事实; 全局 MEMORY.md 只存跨项目通用的环境/工具事实。
 - Use target='failure' only for generalized cross-project lessons. If the useful memory depends on concrete project names, functions, versions, or paths, use target='project'.
-
 ACTIONS: add (new entry), replace (update existing -- old_text identifies it), remove (delete -- old_text identifies it).`;
 // ─── Structured-output system prompt (shared by all in-process reviews) ───
 //

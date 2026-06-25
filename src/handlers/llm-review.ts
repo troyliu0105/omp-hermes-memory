@@ -16,6 +16,7 @@ import type { Api, AssistantMessage, Context, Model } from "@oh-my-pi/pi-ai/type
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import type { Effort } from "@oh-my-pi/pi-catalog/effort";
 import { MemoryStore } from "../store/memory-store.js";
+import { checkScopeViolation } from "../store/scope-guard.js";
 import type { MemoryCategory, MemoryConfig } from "../types.js";
 
 type ChildLlmConfig = Pick<MemoryConfig, "llmModelOverride" | "llmThinkingOverride">;
@@ -288,11 +289,18 @@ export async function applyMemoryOperations(
 
       // Failure target uses addFailure() for metadata, other targets use add()
       const target = isProject ? "memory" : op.target as "memory" | "user" | "failure";
-
       switch (op.action) {
+
         case "add": {
           if (!op.content) {
             skipped++;
+            continue;
+          }
+          // Scope enforcement: reject project-specific content routed to global
+          // user/memory by the review LLM. Skip (don't write) with a logged reason.
+          if (!isProject && target !== "failure" && checkScopeViolation(op.content).violated) {
+            skipped++;
+            errors.push(`scope-guard: entry looks project-specific, skipped writing to ${target}`);
             continue;
           }
           if (target === "failure") {
@@ -314,6 +322,12 @@ export async function applyMemoryOperations(
           const match = op.match ?? op.old_text;
           if (!match || !op.content) {
             skipped++;
+            continue;
+          }
+          // Scope enforcement (same as add path).
+          if (!isProject && target !== "failure" && op.content && checkScopeViolation(op.content).violated) {
+            skipped++;
+            errors.push(`scope-guard: replacement content looks project-specific, skipped writing to ${target}`);
             continue;
           }
           const result = await store.replace(target, match, op.content);

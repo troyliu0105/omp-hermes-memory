@@ -51,7 +51,8 @@ describe("registerMemoryTool", () => {
     assert.match(tool.description, /FOUR TARGETS/);
     assert.match(tool.description, /'failure': global categorized lessons/);
     assert.match(tool.description, /Default to target='project'/);
-    assert.match(tool.description, /repo workflow instructions do not belong in USER\.md/);
+    assert.match(tool.description, /NEVER write repo-specific.*to USER\.md/);
+    assert.match(tool.description, /项目相关.{0,4}记忆.*target='project'/);
   });
 
   it("execute add returns JSON with usage field", async () => {

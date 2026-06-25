@@ -194,7 +194,10 @@ export class MemoryStore {
     const limit = this.charLimit(target);
     const strippedEntries = entries.map((entry) => this.stripMetadata(entry));
     if (strippedEntries.includes(content)) {
-      return this.successResponse(target, "Entry already exists (no duplicate added).");
+      return {
+        success: false,
+        error: `Entry already exists in ${this.scopeLabel(target)}. Not added.`,
+      };
     }
 
     const today = new Date().toISOString().split("T")[0];
@@ -285,21 +288,28 @@ export class MemoryStore {
       const matches = entries.filter((entry) => this.stripMetadata(entry).includes(oldText));
 
       if (matches.length === 0) return { success: false, error: `No entry matched '${oldText}'.` };
-      if (matches.length > 1 && new Set(matches).size > 1) {
+      const strippedMatches = [...new Set(matches.map((entry) => this.stripMetadata(entry)))];
+      if (strippedMatches.length > 1) {
         return {
           success: false,
           error: `Multiple entries matched '${oldText}'. Be more specific.`,
-          matches: matches.map((entry) => this.stripMetadata(entry).slice(0, 80) + (entry.length > 80 ? "..." : "")),
+          matches: strippedMatches.map((entry) => entry.slice(0, 80) + (entry.length > 80 ? "..." : "")),
         };
       }
 
-      const idx = entries.indexOf(matches[0]);
+      const targetText = strippedMatches[0];
       const decoded = this.decodeEntry(matches[0]);
       const today = new Date().toISOString().split("T")[0];
       const encoded = this.encodeEntry(newContent, decoded.created, today);
 
-      const testEntries = [...entries];
-      testEntries[idx] = encoded;
+      // Collapse all raw duplicates (same stripped text, possibly different
+      // metadata timestamps) of the matched entry into the single replacement.
+      // Also avoid re-introducing a duplicate: if newContent (stripped) already
+      // exists among the remaining entries, drop it instead of pushing.
+      const remaining = entries.filter((entry) => this.stripMetadata(entry) !== targetText);
+      const strippedNew = newContent.trim();
+      const testEntries = remaining.filter((entry) => this.stripMetadata(entry) !== strippedNew);
+      testEntries.push(encoded);
       const newTotal = testEntries.join(ENTRY_DELIMITER).length;
 
       if (newTotal > this.charLimit(target)) {
@@ -309,10 +319,8 @@ export class MemoryStore {
         };
       }
 
-      entries[idx] = encoded;
-      this.setEntries(target, entries);
+      this.setEntries(target, testEntries);
       await this.saveToDisk(target);
-
       return this.successResponse(target, "Entry replaced.");
     });
   }
@@ -326,20 +334,27 @@ export class MemoryStore {
       const matches = entries.filter((entry) => this.stripMetadata(entry).includes(oldText));
 
       if (matches.length === 0) return { success: false, error: `No entry matched '${oldText}'.` };
-      if (matches.length > 1 && new Set(matches).size > 1) {
+      const strippedMatches = [...new Set(matches.map((entry) => this.stripMetadata(entry)))];
+      if (strippedMatches.length > 1) {
         return {
           success: false,
           error: `Multiple entries matched '${oldText}'. Be more specific.`,
-          matches: matches.map((entry) => this.stripMetadata(entry).slice(0, 80) + (this.stripMetadata(entry).length > 80 ? "..." : "")),
+          matches: strippedMatches.map((entry) => entry.slice(0, 80) + (entry.length > 80 ? "..." : "")),
         };
       }
 
-      const idx = entries.indexOf(matches[0]);
-      entries.splice(idx, 1);
-      this.setEntries(target, entries);
+      const targetText = strippedMatches[0];
+      const removed = entries.length;
+      const kept = entries.filter((entry) => this.stripMetadata(entry) !== targetText);
+      this.setEntries(target, kept);
       await this.saveToDisk(target);
 
-      return this.successResponse(target, "Entry removed.");
+      const removedCount = removed - kept.length;
+      const msg = removedCount > 1
+        ? `Entry removed (deleted ${removedCount} duplicate copies).`
+        : "Entry removed.";
+
+      return this.successResponse(target, msg);
     });
   }
 
