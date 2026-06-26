@@ -148,7 +148,7 @@ TARGET SELECTION (enforced in code — violations are rejected):
 - Default to target='project' for ANY fact tied to a repository, package, module, function, file path, branch, version, migration, build command, or repo workflow. When in doubt, use 'project'.
 - target='user' / target='memory' 的硬性规则: 项目相关的记忆（仓库、文件路径、版本号、配置、迁移、构建命令、API 细节）只能写到 target='project'。USER.md 只存与用户本人相关、跨项目不变的事实; 全局 MEMORY.md 只存跨项目通用的环境/工具事实。
 - Use target='failure' only for generalized cross-project lessons. If the useful memory depends on concrete project names, functions, versions, or paths, use target='project'.
-ACTIONS: add (new entry), replace (update existing -- old_text identifies it), remove (delete -- old_text identifies it).`;
+ACTIONS: add (new entry), replace (update existing -- match identifies it; requires content), remove (delete -- match identifies it).`;
 // ─── Structured-output system prompt (shared by all in-process reviews) ───
 //
 // The in-process review path (llm-review.ts) replaces the old `omp -p` subprocess.

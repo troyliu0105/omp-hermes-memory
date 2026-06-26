@@ -353,7 +353,7 @@ describe("registerMemoryTool", () => {
     assert.ok(parsed.error.includes("required"), "error should mention required content");
   });
 
-  it("execute replace without old_text returns error", async () => {
+  it("execute replace without match returns error", async () => {
     let capturedResult: any;
 
     const mockPi = {
@@ -368,11 +368,11 @@ describe("registerMemoryTool", () => {
     const result = await capturedResult.execute("tc-1", { action: "replace", target: "memory", content: "new" }, undefined as any, undefined as any, undefined as any);
 
     const parsed = JSON.parse(result.content[0].text);
-    assert.strictEqual(parsed.success, false, "should fail without old_text");
-    assert.ok(parsed.error.includes("old_text"), "error should mention old_text");
+    assert.strictEqual(parsed.success, false, "should fail without match");
+    assert.ok(parsed.error.includes("match"), "error should mention match");
   });
 
-  it("execute remove without old_text returns error", async () => {
+  it("execute remove without match returns error", async () => {
     let capturedResult: any;
 
     const mockPi = {
@@ -387,8 +387,8 @@ describe("registerMemoryTool", () => {
     const result = await capturedResult.execute("tc-1", { action: "remove", target: "memory" }, undefined as any, undefined as any, undefined as any);
 
     const parsed = JSON.parse(result.content[0].text);
-    assert.strictEqual(parsed.success, false, "should fail without old_text");
-    assert.ok(parsed.error.includes("old_text"), "error should mention old_text");
+    assert.strictEqual(parsed.success, false, "should fail without match");
+    assert.ok(parsed.error.includes("match"), "error should mention match");
   });
 
   it("execute delegates replace to store.replace", async () => {
@@ -435,5 +435,73 @@ describe("registerMemoryTool", () => {
     await capturedResult.execute("tc-1", { action: "remove", target: "memory", old_text: "old entry" }, undefined as any, undefined as any, undefined as any);
 
     assert.deepStrictEqual(removeArgs, ["memory", "old entry"], "should pass target, old_text to store.remove");
+  });
+  it("execute replace uses match param (canonical)", async () => {
+    let capturedResult: any;
+    let replaceArgs: any;
+
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockStore = {
+      replace: (...args: any[]) => {
+        replaceArgs = args;
+        return { success: true, target: "memory", entries: ["new"], usage: "5% — 110/5000 chars", entry_count: 1 };
+      },
+    } as unknown as MemoryStore;
+
+    registerMemoryTool(mockPi, mockStore, null);
+    await capturedResult.execute("tc-1", { action: "replace", target: "memory", content: "new", match: "old" }, undefined as any, undefined as any, undefined as any);
+
+    assert.deepStrictEqual(replaceArgs, ["memory", "old", "new"], "should pass target, match, content to store.replace");
+  });
+
+  it("execute remove uses match param (canonical)", async () => {
+    let capturedResult: any;
+    let removeArgs: any;
+
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockStore = {
+      remove: (...args: any[]) => {
+        removeArgs = args;
+        return { success: true, target: "memory", entries: [], usage: "0% — 0/5000 chars", entry_count: 0 };
+      },
+    } as unknown as MemoryStore;
+
+    registerMemoryTool(mockPi, mockStore, null);
+    await capturedResult.execute("tc-1", { action: "remove", target: "memory", match: "old entry" }, undefined as any, undefined as any, undefined as any);
+
+    assert.deepStrictEqual(removeArgs, ["memory", "old entry"], "should pass target, match to store.remove");
+  });
+
+  it("match takes precedence over old_text when both are provided", async () => {
+    let capturedResult: any;
+    let replaceArgs: any;
+
+    const mockPi = {
+      registerTool: (def: any) => {
+        capturedResult = def;
+      },
+    } as unknown as ExtensionAPI;
+
+    const mockStore = {
+      replace: (...args: any[]) => {
+        replaceArgs = args;
+        return { success: true, target: "memory", entries: ["new"], usage: "5% — 110/5000 chars", entry_count: 1 };
+      },
+    } as unknown as MemoryStore;
+
+    registerMemoryTool(mockPi, mockStore, null);
+    await capturedResult.execute("tc-1", { action: "replace", target: "memory", content: "new", match: "canonical", old_text: "legacy" }, undefined as any, undefined as any, undefined as any);
+
+    assert.deepStrictEqual(replaceArgs, ["memory", "canonical", "new"], "match should win over old_text");
   });
 });

@@ -203,10 +203,10 @@ export function registerMemoryTool(
         Type.String({ description: "Entry content for add/replace" })
       ),
       match: Type.Optional(
-        Type.String({ description: "Substring to match for replace/remove" })
+        Type.String({ description: "REQUIRED for replace/remove. Substring of the existing entry text that identifies the entry to update or delete." })
       ),
       old_text: Type.Optional(
-        Type.String({ description: "Legacy alias for match" })
+        Type.String({ description: "Alias for match (kept for backwards compatibility)" })
       ),
       category: Type.Optional(
         Type.Union([Type.Literal("failure"), Type.Literal("correction"), Type.Literal("insight"), Type.Literal("preference"), Type.Literal("convention"), Type.Literal("tool-quirk")], {
@@ -216,7 +216,9 @@ export function registerMemoryTool(
       failure_reason: Type.Optional(Type.String({ description: "Optional reason this failure happened" })),
     }),
     async execute(toolCallId, params, signal, onUpdate, ctx) {
-      const { action, target: rawTarget, content, old_text, category, failure_reason } = params;
+      const { action, target: rawTarget, content, match, old_text, category, failure_reason } = params;
+      // `match` is the canonical param; `old_text` is a kept-for-compat alias.
+      const matchKey = match ?? old_text;
 
       // Route 'project' to projectStore using the normal MEMORY.md target.
       const target = rawTarget === "project" ? "memory" : rawTarget as "memory" | "user" | "failure";
@@ -291,16 +293,15 @@ export function registerMemoryTool(
             }
           }
           break;
-
         case "replace":
-          if (!old_text) {
+          if (!matchKey) {
             return {
               content: [
                 {
                   type: "text",
                   text: JSON.stringify({
                     success: false,
-                    error: "old_text is required for 'replace' action.",
+                    error: "match is required for 'replace' action. Provide the 'match' param with a substring that identifies the existing entry to update.",
                   }),
                 },
               ],
@@ -333,30 +334,30 @@ export function registerMemoryTool(
               break;
             }
           }
-          result = await store_.replace(target, old_text, content);
+          result = await store_.replace(target, matchKey, content);
           if (result.success) {
-            syncWarning = await syncReplaceToSqlite(rawTarget, old_text, content, dbManager, projectName);
+            syncWarning = await syncReplaceToSqlite(rawTarget, matchKey, content, dbManager, projectName);
           }
           break;
 
         case "remove":
-          if (!old_text) {
+          if (!matchKey) {
             return {
               content: [
                 {
                   type: "text",
                   text: JSON.stringify({
                     success: false,
-                    error: "old_text is required for 'remove' action.",
+                    error: "match is required for 'remove' action. Provide the 'match' param with a substring that identifies the existing entry to delete.",
                   }),
                 },
               ],
               details: {},
             };
           }
-          result = await store_.remove(target, old_text);
+          result = await store_.remove(target, matchKey);
           if (result.success) {
-            syncWarning = await syncRemoveFromSqlite(rawTarget, old_text, dbManager, projectName);
+            syncWarning = await syncRemoveFromSqlite(rawTarget, matchKey, dbManager, projectName);
           }
           break;
 
